@@ -30,7 +30,7 @@ const state = {
   activeProfile: null,
   activeProfileRelation: 'none',
   themeColor: localStorage.getItem('lnz_theme_color') || '#7a3cff',
-  seasonTheme: localStorage.getItem('lnz_season_theme_v2') || 'halloween',
+  seasonTheme: 'halloween',
   pendingSeasonTheme: localStorage.getItem('lnz_season_theme_v2') || 'halloween',
   authMode: 'login',
   authRequired: false,
@@ -2652,7 +2652,6 @@ function closeAllInboundPeers() {
 
 async function startSharing() {
   if (!state.room) return;
-  if (!state.account) return openAuthModal(true);
   if (state.isSharing) return stopSharing();
   if (!navigator.mediaDevices?.getDisplayMedia) return showToast('Seu navegador não permite compartilhar tela.');
 
@@ -3291,30 +3290,33 @@ $('channelCall')?.addEventListener('click', () => {
 // Tema visual sazonal
 applySeasonTheme(state.seasonTheme || 'halloween');
 
-// Risada macabra original. Se o autoplay com som for bloqueado, toca no primeiro clique/toque.
+// Som de abertura extraído do vídeo enviado pelo usuário.
+// Toca uma única vez por carregamento da página.
 function initHalloweenLaugh() {
   const audio = $('halloweenLaugh');
   if (!audio) return;
-  let played = sessionStorage.getItem('lnz_halloween_laugh_played') === '1';
+
+  let played = false;
+
   const cleanup = () => {
     window.removeEventListener('pointerdown', onFirstInteraction, true);
     window.removeEventListener('keydown', onFirstInteraction, true);
   };
+
   const playOnce = async () => {
     if (played || state.seasonTheme !== 'halloween') return;
     try {
-      audio.volume = 0.42;
+      audio.loop = false;
+      audio.volume = 0.55;
       audio.currentTime = 0;
       await audio.play();
       played = true;
-      sessionStorage.setItem('lnz_halloween_laugh_played', '1');
       cleanup();
     } catch {}
   };
+
   const onFirstInteraction = () => { playOnce(); };
   playOnce();
-  if (!played) {
-    window.addEventListener('pointerdown', onFirstInteraction, true);
-    window.addEventListener('keydown', onFirstInteraction, true);
-  }
+  window.addEventListener('pointerdown', onFirstInteraction, true);
+  window.addEventListener('keydown', onFirstInteraction, true);
 }

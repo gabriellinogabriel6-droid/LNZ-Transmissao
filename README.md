@@ -313,3 +313,15 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - Câmera ON/OFF e troca frontal/traseira quando o aparelho permitir.
 - Mix de volume adaptado para toque no celular.
 - O fundo do Halloween fica em public/assets/halloween-background.png.
+
+
+## Halloween final
+
+- Fundo: exatamente a imagem Halloween enviada pelo usuário.
+- Fundo clareado para ficar bem visível atrás da interface.
+- Fantasmas animados continuam voando pela tela.
+- Som de abertura: somente o áudio extraído do vídeo enviado.
+- O som não repete; toca uma única vez por carregamento.
+- Login/conta/senha não aparecem.
+- Compartilhar tela não exige conta.
+- A pessoa usa somente o nickname para se identificar na sala.
