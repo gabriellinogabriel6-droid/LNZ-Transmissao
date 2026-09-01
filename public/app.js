@@ -974,6 +974,7 @@ function setView(view) {
   $('landingView').classList.toggle('hidden', view !== 'landing');
   $('prejoinView').classList.toggle('hidden', view !== 'prejoin');
   $('roomView').classList.toggle('hidden', view !== 'room');
+  document.body.dataset.view = view;
 }
 
 function saveIdentity(nickname) {
@@ -3289,6 +3290,7 @@ $('channelCall')?.addEventListener('click', () => {
 
 // Tema visual sazonal
 applySeasonTheme(state.seasonTheme || 'halloween');
+if (!document.body.dataset.view) document.body.dataset.view = 'landing';
 
 // Som de abertura extraído do vídeo enviado pelo usuário.
 // Toca uma única vez por carregamento da página.

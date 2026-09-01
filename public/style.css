@@ -1384,3 +1384,161 @@ body.auth-required { overflow:auto !important; }
   html[data-season-theme="halloween"] .background-art { background-position:center center !important; }
   html[data-season-theme="halloween"] .entry-card { background:rgba(7,4,10,.78) !important; }
 }
+
+
+/* =========================================================
+   SALA CLÁSSICA LNZ
+   - volta ao layout simples das primeiras versões
+   - mesma arte Halloween do início no fundo
+   - fantasmas SOMENTE na tela inicial
+   ========================================================= */
+
+/* Fantasmas e lua apenas no início */
+body:not([data-view="landing"]) .seasonal-decor {
+  display: none !important;
+}
+body[data-view="landing"] .seasonal-decor {
+  display: block !important;
+}
+
+/* O fundo principal permanece o mesmo em todas as telas */
+html[data-season-theme="halloween"] .background-art {
+  background:
+    linear-gradient(90deg, rgba(2,1,4,.38) 0%, rgba(8,3,12,.14) 48%, rgba(2,1,4,.34) 100%),
+    linear-gradient(to bottom, rgba(0,0,0,.03), rgba(0,0,0,.15)),
+    url('/assets/halloween-background.png') center center / cover no-repeat fixed !important;
+  filter: saturate(1.08) contrast(1.03) brightness(1.04) !important;
+  opacity: 1 !important;
+}
+
+/* Remove a barra vertical extra que foi adicionada no visual Discord */
+.room-view .discord-rail {
+  display: none !important;
+}
+
+/* Layout clássico: menu esquerdo + transmissão + chat */
+.room-view {
+  min-height: 100vh !important;
+  display: grid !important;
+  grid-template-columns: 235px minmax(0, 1fr) 340px !important;
+  grid-template-rows: 72px 1fr !important;
+  background: rgba(3, 2, 6, .22) !important;
+}
+
+/* Topo atravessa toda a sala */
+.room-topbar {
+  grid-column: 1 / -1 !important;
+  grid-row: 1 !important;
+  min-height: 72px !important;
+  background: rgba(7, 4, 11, .78) !important;
+  border-bottom: 1px solid rgba(255,117,24,.16) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+/* Coluna da esquerda */
+.room-sidebar {
+  grid-column: 1 !important;
+  grid-row: 2 !important;
+  background: rgba(7, 4, 11, .76) !important;
+  border-right: 1px solid rgba(255,117,24,.12) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+/* Centro com a MESMA imagem do início aparecendo atrás */
+.room-stage {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+  min-width: 0 !important;
+  min-height: calc(100vh - 72px) !important;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(126,53,255,.08), transparent 38%),
+    rgba(4, 3, 7, .42) !important;
+  backdrop-filter: blur(1.5px) !important;
+}
+
+/* Chat mais transparente para o fundo continuar aparecendo */
+.chat-panel {
+  grid-column: 3 !important;
+  grid-row: 2 !important;
+  background: rgba(7, 4, 11, .76) !important;
+  border-left: 1px solid rgba(255,117,24,.12) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+/* Cards e canais no estilo simples */
+.invite-card {
+  background: rgba(8, 5, 12, .58) !important;
+  border: 1px solid rgba(255,117,24,.14) !important;
+}
+.discord-channel {
+  border-radius: 9px !important;
+}
+.discord-channel.active {
+  background: rgba(255,255,255,.08) !important;
+}
+
+/* Barra de controles continua acessível sem cobrir a tela */
+.room-controlbar {
+  background: rgba(7, 4, 11, .90) !important;
+  backdrop-filter: blur(12px) !important;
+  border-top: 1px solid rgba(255,117,24,.14) !important;
+}
+
+/* No pré-join não aparecem fantasmas, mas o mesmo fundo fica visível */
+.prejoin-view {
+  background: rgba(3,2,6,.18) !important;
+}
+
+/* Tablet */
+@media (max-width: 1100px) {
+  .room-view {
+    grid-template-columns: 220px minmax(0,1fr) !important;
+    grid-template-rows: 65px auto 1fr !important;
+  }
+  .room-topbar {
+    grid-column: 1 / -1 !important;
+    grid-row: 1 !important;
+  }
+  .room-sidebar {
+    grid-column: 1 !important;
+    grid-row: 2 / 4 !important;
+  }
+  .room-stage {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    min-height: 560px !important;
+  }
+  .chat-panel {
+    grid-column: 2 !important;
+    grid-row: 3 !important;
+    min-height: 360px;
+  }
+}
+
+/* Celular */
+@media (max-width: 760px) {
+  .room-view {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 62px auto 1fr !important;
+  }
+  .room-topbar {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+  }
+  .room-sidebar {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid rgba(255,117,24,.12) !important;
+  }
+  .room-stage {
+    grid-column: 1 !important;
+    grid-row: 3 !important;
+    min-height: calc(100vh - 285px) !important;
+    background: rgba(4,3,7,.34) !important;
+  }
+  .chat-panel {
+    grid-column: 1 !important;
+    grid-row: 4 !important;
+  }
+}

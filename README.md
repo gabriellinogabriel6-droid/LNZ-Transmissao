@@ -325,3 +325,13 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - Login/conta/senha não aparecem.
 - Compartilhar tela não exige conta.
 - A pessoa usa somente o nickname para se identificar na sala.
+
+
+## Sala clássica + fundo Halloween
+
+- A sala voltou ao layout simples das primeiras versões.
+- A barra lateral vertical extra do visual Discord foi removida.
+- A mesma imagem Halloween usada no início aparece como fundo da sala.
+- Fantasmas e lua animados aparecem somente na tela inicial.
+- Dentro da sala não aparecem fantasmas.
+- Funcionalidades de transmissão, chat, call, câmera e volume foram mantidas.
