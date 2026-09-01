@@ -38,3 +38,20 @@ RECUPERACAO DE CONTA
 - Nao precisa criar tabela manualmente: o servidor atualiza a tabela users sozinho.
 - Confirme que DATABASE_URL esta configurado no Render.
 - Depois do deploy, usuarios antigos devem entrar na conta e clicar em "Gerar novo codigo de recuperacao" uma vez.
+
+CORREÇÃO PERFIL / AMIGOS / COR DO SITE
+- Substitua server.js
+- Substitua public/app.js
+- Substitua public/index.html
+- Substitua public/style.css
+- Faça Commit changes e Deploy latest commit no Render.
+- Depois abra o site com Ctrl + F5.
+
+
+PAINEL ADMIN PRIVADO
+- No Render > Environment, adicione:
+  ADMIN_USERNAME=SEU_LOGIN_EXATO
+- Exemplo: ADMIN_USERNAME=lino
+- Somente essa conta, autenticada no site, consegue abrir /api/admin/dashboard e o Painel Admin.
+- O painel mostra contas cadastradas, usuários online, sessões, salas ativas, transmissões, feedbacks e registros de atividade.
+- Senhas, códigos de recuperação e conteúdo das mensagens do chat NÃO aparecem nos logs.

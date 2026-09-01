@@ -152,3 +152,84 @@ Esta versão mantém o login obrigatório e adiciona recuperação de conta.
 ### PostgreSQL obrigatório no Render
 
 Para contas, senhas, perfis, amigos e códigos de recuperação continuarem existindo depois de reiniciar o serviço, configure `DATABASE_URL` no Render com seu PostgreSQL. A atualização cria automaticamente as novas colunas `recovery_code_hash` e `recovery_code_created_at`.
+
+## Perfil, amigos e cor do site — corrigidos
+
+Esta versão liga os três botões que antes apareciam sem funcionar:
+
+- **Meu perfil:** abre o perfil da conta, mostra avatar/GIF, status, bio, data da conta e permite editar.
+- **GIF no avatar:** PNG/JPG/WEBP/GIF com até aproximadamente 1,4 MB pelo navegador; o avatar e o enquadramento ficam salvos na conta.
+- **Inspecionar perfil:** clique em uma pessoa na lista da sala ou em um amigo para abrir o perfil dela.
+- **Amigos:** pesquisa usuários, envia pedido, aceita/recusa, cancela pedido e remove amizade. Pedidos recebidos aparecem com contador.
+- **Cor do site:** presets + seletor personalizado. A cor fica salva no banco e é carregada quando a pessoa faz login.
+- O tema altera botões, bordas, brilhos e outros detalhes principais para aquele usuário.
+
+As amizades, bio, status, avatar e tema são persistidos no PostgreSQL quando `DATABASE_URL` está configurado no Render.
+
+## Visual inspirado no Discord
+
+A interface da sala agora usa uma organização mais parecida com apps sociais como o Discord, mantendo a identidade LNZ:
+
+- barra lateral de atalhos;
+- canais de transmissão, chat e call;
+- lista de membros em painel próprio;
+- chat com mensagens mais limpas, estilo canal;
+- perfil, amigos e tema acessíveis pela lateral;
+- cor personalizada do usuário continua sendo usada como destaque da interface.
+
+
+## Painel Admin privado
+
+Configure no Render:
+
+```env
+ADMIN_USERNAME=seu_login_exato
+```
+
+Depois entre no site com essa mesma conta. O botão **Painel Admin** aparecerá apenas para o administrador. A API também valida a sessão no servidor, então esconder o botão não é a proteção principal.
+
+O painel mostra:
+- contas cadastradas e último login;
+- usuários online e sessões ativas;
+- salas abertas agora;
+- transmissões ativas;
+- feedbacks, incluindo contato opcional;
+- registros de criação/login/logout de conta, entrada/saída de sala, abertura/fechamento de sala, transmissão, call, chat e atualização/reinício do site.
+
+Por privacidade e segurança, **senhas, códigos de recuperação e texto das mensagens do chat não são exibidos nos registros**.
+
+## Call com câmera e controles por participante
+
+Esta versão adiciona:
+
+- **Câmera ON/OFF** para quem estiver na call.
+- Grade de câmeras dentro da sala, com destaque em quem estiver falando.
+- Indicadores de **Falando**, **Em silêncio**, **Mic OFF** e câmera ligada.
+- Menu `⋯` em cada participante com:
+  - Ver perfil.
+  - Volume individual (0–100%).
+  - Silenciar somente para você.
+  - Ocultar/mostrar somente a câmera daquela pessoa para você.
+- Para o dono da sala:
+  - Silenciar/liberar o microfone de um participante na sala.
+  - Remover participante da sala.
+- O mute individual não afeta os outros participantes.
+- A câmera local fica espelhada apenas no próprio preview.
+
+### Observação sobre muitas câmeras
+
+A call usa WebRTC ponto a ponto. Ela não possui um limite fixo imposto pelo código, mas quanto mais pessoas com câmera/microfone ao mesmo tempo, maior o uso de upload, download e CPU de cada participante. Para salas muito grandes, o ideal futuramente é usar uma arquitetura SFU dedicada.
+
+## Contas salvas + Manter conectado
+
+Esta versão reforça a persistência das contas e adiciona **Manter conectado**.
+
+- Em produção/Render, criação e login de contas exigem PostgreSQL conectado por `DATABASE_URL`.
+- Se o banco não estiver configurado, o site mostra um erro em vez de criar uma conta temporária que sumiria no próximo restart.
+- Com **Manter conectado** marcado, a sessão fica persistente por até 90 dias neste dispositivo (ou até a pessoa clicar em Sair).
+- Sem marcar, a autenticação usa cookie de sessão do navegador e sessão do servidor com validade menor.
+- Senhas continuam armazenadas apenas como hash; o servidor não guarda a senha original.
+
+### Render
+
+Em **Environment**, configure `DATABASE_URL` com a URL do PostgreSQL. Depois salve e faça um novo deploy.

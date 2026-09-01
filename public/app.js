@@ -27,6 +27,9 @@ const state = {
   voiceOutputMuted: localStorage.getItem('lnz_voice_output_muted') === '1',
   mixerOpen: false,
   account: null,
+  activeProfile: null,
+  activeProfileRelation: 'none',
+  themeColor: localStorage.getItem('lnz_theme_color') || '#7a3cff',
   authMode: 'login',
   authRequired: false,
   suppressDisconnectBanner: false,
@@ -42,17 +45,27 @@ const state = {
   mutedSharers: new Set(),
   voiceJoined: false,
   voiceMuted: false,
+  voiceServerMuted: false,
   voiceStream: null,
   voicePeers: new Map(),
   voiceAudios: new Map(),
+  voiceRemoteStreams: new Map(),
   voicePendingIce: new Map(),
+  voicePeerVolumes: new Map(),
+  voicePeerMuted: new Set(),
+  cameraOn: false,
+  cameraTrack: null,
+  cameraHiddenPeers: new Set(),
+  cameraDockMinimized: false,
+  participantMenuTarget: null,
   voiceSpeaking: false,
   voiceSpeakingContext: null,
   voiceSpeakingTimer: null,
   voiceSpeakingSource: null,
   voiceSpeakingLastLoudAt: 0,
   feedbackType: 'sugestao',
-  feedbackRating: 5
+  feedbackRating: 5,
+  adminTab: 'logs'
 };
 
 function applyDiscordLinks() {
@@ -79,6 +92,7 @@ function setAuthMode(mode) {
   $('authRecoverTab')?.classList.toggle('active', recover);
   $('authConfirmWrap')?.classList.toggle('hidden', !(register || recover));
   $('authRecoveryCodeWrap')?.classList.toggle('hidden', !recover);
+  $('authRememberWrap')?.classList.toggle('hidden', recover);
   $('forgotPasswordButton')?.classList.toggle('hidden', recover);
   if ($('authTitle')) $('authTitle').textContent = register ? 'Criar sua conta' : (recover ? 'Recuperar sua conta' : 'Entrar na sua conta');
   if ($('authSubmit')) $('authSubmit').textContent = register ? 'Criar conta' : (recover ? 'Trocar senha e entrar' : 'Entrar');
@@ -97,12 +111,26 @@ function updateAccountUI() {
   $('accountSignedIn')?.classList.toggle('hidden', !logged);
   $('authLoggedOut')?.classList.toggle('hidden', logged);
   $('authLoggedIn')?.classList.toggle('hidden', !logged);
+  document.querySelectorAll('.social-account-action').forEach((el) => el.classList.toggle('hidden', !logged));
+  const adminVisible = Boolean(logged && state.account?.isAdmin);
+  document.querySelectorAll('.admin-only').forEach((el) => el.classList.toggle('hidden', !adminVisible));
   if (logged) {
     const username = state.account.username;
     if ($('accountUsernameLabel')) $('accountUsernameLabel').textContent = username;
     if ($('authLoggedInUsername')) $('authLoggedInUsername').textContent = username;
     state.nickname = username;
     localStorage.setItem('lnz_nickname', username);
+
+    // O perfil salvo na conta passa a ser a fonte principal do avatar/tema.
+    if (typeof state.account.avatar === 'string') state.avatar = state.account.avatar;
+    if (Number.isFinite(Number(state.account.avatarScale))) state.avatarScale = Number(state.account.avatarScale);
+    if (Number.isFinite(Number(state.account.avatarOffsetX))) state.avatarOffsetX = Number(state.account.avatarOffsetX);
+    if (Number.isFinite(Number(state.account.avatarOffsetY))) state.avatarOffsetY = Number(state.account.avatarOffsetY);
+    state.themeColor = state.account.themeColor || state.themeColor || '#7a3cff';
+    localStorage.setItem('lnz_theme_color', state.themeColor);
+    persistAvatarState();
+    applyThemeColor(state.themeColor);
+
     if ($('landingNickname')) {
       $('landingNickname').value = username;
       $('landingNickname').readOnly = true;
@@ -112,9 +140,12 @@ function updateAccountUI() {
       $('prejoinNickname').readOnly = true;
     }
     updateNicknamePreview();
+    updateAvatarUI();
+    renderEditProfileAvatar();
   } else {
     if ($('landingNickname')) $('landingNickname').readOnly = true;
     if ($('prejoinNickname')) $('prejoinNickname').readOnly = true;
+    document.querySelectorAll('.social-account-action').forEach((el) => el.classList.add('hidden'));
   }
 }
 
@@ -212,6 +243,7 @@ async function submitAuth() {
   const password = $('authPassword')?.value || '';
   const confirm = $('authPasswordConfirm')?.value || '';
   const recoveryCode = $('authRecoveryCode')?.value.trim() || '';
+  const remember = state.authMode === 'recover' ? true : Boolean($('authRemember')?.checked);
   const error = $('authError');
   if (error) error.classList.add('hidden');
 
@@ -229,7 +261,10 @@ async function submitAuth() {
   if (button) { button.disabled = true; button.textContent = loadingText; }
   try {
     const endpoint = state.authMode === 'register' ? 'register' : (state.authMode === 'recover' ? 'recover' : 'login');
-    const body = state.authMode === 'recover' ? { username, recoveryCode, password } : { username, password };
+    const body = state.authMode === 'recover'
+      ? { username, recoveryCode, password, remember }
+      : { username, password, remember };
+    localStorage.setItem('lnz_remember_login', remember ? '1' : '0');
     const response = await fetch(`/api/auth/${endpoint}`, {
       method: 'POST',
       credentials: 'same-origin',
@@ -245,12 +280,17 @@ async function submitAuth() {
     await reconnectSocketAfterAuth();
     closeAuthModal();
     if (data.recoveryCode) showRecoveryCode(data.recoveryCode);
-    showToast(state.authMode === 'register' ? 'Conta criada e conectada.' : (state.authMode === 'recover' ? 'Senha alterada. Você já está conectado.' : 'Login realizado.'));
+    showToast(state.authMode === 'register'
+      ? (remember ? 'Conta criada. Você ficará conectado neste dispositivo.' : 'Conta criada e conectada.')
+      : (state.authMode === 'recover'
+        ? 'Senha alterada. Você já está conectado.'
+        : (remember ? 'Login realizado. Manter conectado ativado.' : 'Login realizado.')));
     setAuthMode('login');
     if ($('authPassword')) $('authPassword').value = '';
     if ($('authPasswordConfirm')) $('authPasswordConfirm').value = '';
     if ($('authRecoveryCode')) $('authRecoveryCode').value = '';
     await loadPublicRooms();
+    await loadFriends(false);
     await routeFromLocation();
   } catch (err) {
     if (error) { error.textContent = err?.message || 'Não foi possível entrar.'; error.classList.remove('hidden'); }
@@ -278,6 +318,391 @@ function ensureLoggedIn() {
   showToast('Faça login para continuar.');
   return false;
 }
+
+
+function hexToRgb(hex) {
+  const clean = String(hex || '#7a3cff').replace('#', '');
+  const value = Number.parseInt(clean, 16);
+  if (!Number.isFinite(value)) return { r: 122, g: 60, b: 255 };
+  return { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
+}
+
+function lightenHex(hex, amount = 0.18) {
+  const { r, g, b } = hexToRgb(hex);
+  const mix = (v) => Math.round(v + (255 - v) * amount).toString(16).padStart(2, '0');
+  return `#${mix(r)}${mix(g)}${mix(b)}`;
+}
+
+function applyThemeColor(color) {
+  const selected = /^#[0-9a-f]{6}$/i.test(String(color || '')) ? String(color).toLowerCase() : '#7a3cff';
+  state.themeColor = selected;
+  localStorage.setItem('lnz_theme_color', selected);
+  const { r, g, b } = hexToRgb(selected);
+  const root = document.documentElement;
+  root.style.setProperty('--accent', selected);
+  root.style.setProperty('--accent-2', lightenHex(selected, .2));
+  root.style.setProperty('--cyan', lightenHex(selected, .12));
+  root.style.setProperty('--line', `rgba(${r}, ${g}, ${b}, .22)`);
+  root.style.setProperty('--line-strong', `rgba(${r}, ${g}, ${b}, .42)`);
+  root.style.setProperty('--user-accent-rgb', `${r}, ${g}, ${b}`);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', selected);
+  if ($('themeColorPicker')) $('themeColorPicker').value = selected;
+  if ($('themeHexLabel')) $('themeHexLabel').textContent = selected.toUpperCase();
+  document.querySelectorAll('#themePresets [data-theme]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.theme?.toLowerCase() === selected);
+  });
+}
+
+async function apiJson(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    ...options,
+    headers: {
+      ...(options.body ? { 'content-type': 'application/json' } : {}),
+      ...(options.headers || {})
+    }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível concluir a ação.');
+  return data;
+}
+
+function setAvatarInContainer(container, profile, fallback = '?') {
+  if (!container) return;
+  const avatar = profile?.avatar || '';
+  const name = profile?.username || fallback;
+  container.innerHTML = '';
+  if (avatar) {
+    const img = document.createElement('img');
+    img.src = avatar;
+    img.alt = `Avatar de ${name}`;
+    applyAvatarTransform(img, profile?.avatarScale ?? 1.35, profile?.avatarOffsetX ?? 0, profile?.avatarOffsetY ?? 0);
+    container.appendChild(img);
+  } else {
+    const span = document.createElement('span');
+    span.textContent = initials(name);
+    container.appendChild(span);
+  }
+}
+
+function renderEditProfileAvatar() {
+  if (!$('editProfileAvatar')) return;
+  setAvatarInContainer($('editProfileAvatar'), {
+    username: state.account?.username || state.nickname || 'LZ',
+    avatar: state.avatar,
+    avatarScale: state.avatarScale,
+    avatarOffsetX: state.avatarOffsetX,
+    avatarOffsetY: state.avatarOffsetY
+  });
+}
+
+
+async function saveAvatarToAccountSilently() {
+  if (!state.account) return;
+  try {
+    const data = await apiJson('/api/profile/update', {
+      method: 'POST',
+      body: JSON.stringify({
+        avatar: state.avatar,
+        avatarScale: state.avatarScale,
+        avatarOffsetX: state.avatarOffsetX,
+        avatarOffsetY: state.avatarOffsetY,
+        bio: state.account.bio || '',
+        status: state.account.status || '',
+        themeColor: state.account.themeColor || state.themeColor || '#7a3cff'
+      })
+    });
+    state.account = { ...state.account, ...data.profile };
+  } catch {
+    // Continua funcionando localmente; o botão Salvar perfil permite tentar novamente.
+  }
+}
+
+function closeProfileModal() {
+  $('profileModal')?.classList.add('hidden');
+  $('profileModal')?.setAttribute('aria-hidden', 'true');
+  state.activeProfile = null;
+  state.activeProfileRelation = 'none';
+}
+
+function renderProfile(profile, relation = 'none') {
+  state.activeProfile = profile;
+  state.activeProfileRelation = relation;
+  $('profileUsername').textContent = profile.username || '—';
+  $('profileOnline').textContent = profile.online ? 'online' : 'offline';
+  $('profileOnline').classList.toggle('online', Boolean(profile.online));
+  $('profileStatus').textContent = profile.status || 'Sem status';
+  $('profileBio').textContent = profile.bio || 'Este usuário ainda não escreveu uma bio.';
+  $('profileMemberSince').textContent = new Date(profile.createdAt || Date.now()).toLocaleDateString('pt-BR');
+  setAvatarInContainer($('profileAvatar'), profile, profile.username);
+
+  const isSelf = relation === 'self' || profile.id === state.account?.id || profile.username === state.account?.username;
+  $('editMyProfile').classList.toggle('hidden', !isSelf);
+  $('profileFriendAction').classList.toggle('hidden', isSelf);
+  if (!isSelf) {
+    const labels = {
+      none: 'Adicionar amigo',
+      outgoing: 'Cancelar pedido',
+      incoming: 'Aceitar pedido',
+      friends: 'Remover amigo'
+    };
+    $('profileFriendAction').textContent = labels[relation] || 'Adicionar amigo';
+  }
+}
+
+async function openUserProfile(username) {
+  if (!ensureLoggedIn()) return;
+  const target = String(username || state.account?.username || '').trim();
+  if (!target) return;
+  try {
+    const data = await apiJson(`/api/profile/${encodeURIComponent(target)}`);
+    renderProfile(data.profile, data.relation);
+    $('profileModal').classList.remove('hidden');
+    $('profileModal').setAttribute('aria-hidden', 'false');
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function openEditProfile() {
+  if (!state.account) return openAuthModal(true);
+  $('profileStatusInput').value = state.account.status || '';
+  $('profileBioInput').value = state.account.bio || '';
+  $('profileStatusCount').textContent = `${$('profileStatusInput').value.length}/60`;
+  $('profileBioCount').textContent = `${$('profileBioInput').value.length}/160`;
+  renderEditProfileAvatar();
+  $('editProfileModal').classList.remove('hidden');
+  $('editProfileModal').setAttribute('aria-hidden', 'false');
+}
+
+function closeEditProfile() {
+  $('editProfileModal')?.classList.add('hidden');
+  $('editProfileModal')?.setAttribute('aria-hidden', 'true');
+}
+
+async function saveProfileChanges() {
+  if (!state.account) return;
+  const button = $('saveProfile');
+  button.disabled = true;
+  button.textContent = 'Salvando...';
+  try {
+    const data = await apiJson('/api/profile/update', {
+      method: 'POST',
+      body: JSON.stringify({
+        avatar: state.avatar,
+        avatarScale: state.avatarScale,
+        avatarOffsetX: state.avatarOffsetX,
+        avatarOffsetY: state.avatarOffsetY,
+        status: $('profileStatusInput').value.trim(),
+        bio: $('profileBioInput').value.trim(),
+        themeColor: state.themeColor
+      })
+    });
+    state.account = { ...state.account, ...data.profile };
+    updateAccountUI();
+    closeEditProfile();
+    showToast('Perfil salvo.');
+    if (!($('profileModal')?.classList.contains('hidden'))) openUserProfile(state.account.username);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Salvar perfil';
+  }
+}
+
+async function runProfileFriendAction() {
+  const profile = state.activeProfile;
+  if (!profile || !state.account) return;
+  try {
+    let data;
+    if (state.activeProfileRelation === 'incoming') {
+      data = await apiJson('/api/friends/respond', { method: 'POST', body: JSON.stringify({ username: profile.username, action: 'accept' }) });
+    } else if (state.activeProfileRelation === 'friends' || state.activeProfileRelation === 'outgoing') {
+      data = await apiJson('/api/friends/remove', { method: 'POST', body: JSON.stringify({ username: profile.username }) });
+    } else {
+      data = await apiJson('/api/friends/request', { method: 'POST', body: JSON.stringify({ username: profile.username }) });
+    }
+    state.activeProfileRelation = data.status || 'none';
+    renderProfile(profile, state.activeProfileRelation);
+    await loadFriends(false);
+    showToast(state.activeProfileRelation === 'friends' ? 'Agora vocês são amigos.' : state.activeProfileRelation === 'outgoing' ? 'Pedido de amizade enviado.' : 'Amizade atualizada.');
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function friendCard(profile, mode = 'friend') {
+  const row = document.createElement('div');
+  row.className = 'friend-item';
+  const avatar = document.createElement('button');
+  avatar.type = 'button';
+  avatar.className = 'friend-avatar';
+  setAvatarInContainer(avatar, profile, profile.username);
+  avatar.addEventListener('click', () => openUserProfile(profile.username));
+
+  const info = document.createElement('button');
+  info.type = 'button';
+  info.className = 'friend-info';
+  info.innerHTML = `<strong>${escapeHtml(profile.username)}</strong><span>${profile.online ? '● Online' : '○ Offline'}${profile.status ? ` • ${escapeHtml(profile.status)}` : ''}</span>`;
+  info.addEventListener('click', () => openUserProfile(profile.username));
+
+  const actions = document.createElement('div');
+  actions.className = 'friend-actions';
+  if (mode === 'incoming') {
+    const accept = document.createElement('button'); accept.type='button'; accept.className='friend-action accept'; accept.textContent='Aceitar';
+    const reject = document.createElement('button'); reject.type='button'; reject.className='friend-action'; reject.textContent='Recusar';
+    accept.addEventListener('click', async () => { try { await apiJson('/api/friends/respond',{method:'POST',body:JSON.stringify({username:profile.username,action:'accept'})}); await loadFriends(); } catch(e){showToast(e.message);} });
+    reject.addEventListener('click', async () => { try { await apiJson('/api/friends/respond',{method:'POST',body:JSON.stringify({username:profile.username,action:'reject'})}); await loadFriends(); } catch(e){showToast(e.message);} });
+    actions.append(accept,reject);
+  } else if (mode === 'outgoing') {
+    const cancel = document.createElement('button'); cancel.type='button'; cancel.className='friend-action'; cancel.textContent='Cancelar';
+    cancel.addEventListener('click', async () => { try { await apiJson('/api/friends/remove',{method:'POST',body:JSON.stringify({username:profile.username})}); await loadFriends(); } catch(e){showToast(e.message);} });
+    actions.append(cancel);
+  } else if (mode === 'search') {
+    const add = document.createElement('button'); add.type='button'; add.className='friend-action accept';
+    const relation = profile.relation || 'none';
+    add.textContent = relation === 'friends' ? 'Amigos' : relation === 'outgoing' ? 'Enviado' : relation === 'incoming' ? 'Aceitar' : 'Adicionar';
+    add.disabled = relation === 'friends' || relation === 'outgoing';
+    add.addEventListener('click', async () => {
+      try {
+        if (relation === 'incoming') await apiJson('/api/friends/respond',{method:'POST',body:JSON.stringify({username:profile.username,action:'accept'})});
+        else await apiJson('/api/friends/request',{method:'POST',body:JSON.stringify({username:profile.username})});
+        await searchFriends(); await loadFriends(false);
+      } catch(e){ showToast(e.message); }
+    });
+    actions.append(add);
+  } else {
+    const open = document.createElement('button'); open.type='button'; open.className='friend-action'; open.textContent='Perfil'; open.addEventListener('click',()=>openUserProfile(profile.username));
+    actions.append(open);
+  }
+  row.append(avatar, info, actions);
+  return row;
+}
+
+function renderFriendList(containerId, items, mode, emptyText) {
+  const container = $(containerId);
+  container.innerHTML = '';
+  if (!items?.length) {
+    container.innerHTML = `<div class="friend-empty">${escapeHtml(emptyText)}</div>`;
+    return;
+  }
+  items.forEach((item) => container.appendChild(friendCard(item, mode)));
+}
+
+async function loadFriends(showErrors = true) {
+  if (!state.account) return;
+  try {
+    const data = await apiJson('/api/friends');
+    renderFriendList('acceptedFriends', data.friends, 'friend', 'Você ainda não adicionou amigos.');
+    renderFriendList('incomingFriends', data.incoming, 'incoming', 'Nenhum pedido.');
+    renderFriendList('outgoingFriends', data.outgoing, 'outgoing', 'Nenhum pedido pendente.');
+    $('acceptedFriendCount').textContent = String(data.friends.length);
+    $('incomingFriendCount').textContent = String(data.incoming.length);
+    $('outgoingFriendCount').textContent = String(data.outgoing.length);
+    $('friendRequestBadge').textContent = String(data.incoming.length);
+    $('friendRequestBadge').classList.toggle('hidden', data.incoming.length === 0);
+  } catch (error) {
+    if (showErrors) showToast(error.message);
+  }
+}
+
+async function searchFriends() {
+  const query = $('friendSearchInput').value.trim();
+  const container = $('friendSearchResults');
+  container.innerHTML = '';
+  if (!query) return;
+  try {
+    const data = await apiJson(`/api/users/search?q=${encodeURIComponent(query)}`);
+    renderFriendList('friendSearchResults', data.users, 'search', 'Nenhum usuário encontrado.');
+  } catch (error) { showToast(error.message); }
+}
+
+async function openFriendsModal() {
+  if (!ensureLoggedIn()) return;
+  $('friendsModal').classList.remove('hidden');
+  $('friendsModal').setAttribute('aria-hidden', 'false');
+  await loadFriends();
+}
+
+function closeFriendsModal() {
+  $('friendsModal')?.classList.add('hidden');
+  $('friendsModal')?.setAttribute('aria-hidden', 'true');
+}
+
+function openThemeModal() {
+  if (!ensureLoggedIn()) return;
+  applyThemeColor(state.account?.themeColor || state.themeColor || '#7a3cff');
+  $('themeModal').classList.remove('hidden');
+  $('themeModal').setAttribute('aria-hidden', 'false');
+}
+
+function closeThemeModal() {
+  $('themeModal')?.classList.add('hidden');
+  $('themeModal')?.setAttribute('aria-hidden', 'true');
+  applyThemeColor(state.account?.themeColor || state.themeColor || '#7a3cff');
+}
+
+async function saveThemeColor() {
+  if (!state.account) return;
+  const selected = $('themeColorPicker').value;
+  applyThemeColor(selected);
+  try {
+    const data = await apiJson('/api/profile/update', {
+      method: 'POST',
+      body: JSON.stringify({
+        avatar: state.account.avatar || state.avatar,
+        avatarScale: state.account.avatarScale ?? state.avatarScale,
+        avatarOffsetX: state.account.avatarOffsetX ?? state.avatarOffsetX,
+        avatarOffsetY: state.account.avatarOffsetY ?? state.avatarOffsetY,
+        status: state.account.status || '',
+        bio: state.account.bio || '',
+        themeColor: selected
+      })
+    });
+    state.account = { ...state.account, ...data.profile };
+    applyThemeColor(data.profile.themeColor);
+    closeThemeModal();
+    showToast('Cor do site salva na sua conta.');
+  } catch (error) { showToast(error.message); }
+}
+
+// Social: Perfil, Amigos e Cor do site.
+$('myProfileButton')?.addEventListener('click', () => openUserProfile(state.account?.username));
+$('friendsButton')?.addEventListener('click', openFriendsModal);
+$('themeButton')?.addEventListener('click', openThemeModal);
+$('closeProfile')?.addEventListener('click', closeProfileModal);
+$('profileModal')?.addEventListener('click', (event) => { if (event.target.dataset.closeProfile) closeProfileModal(); });
+$('profileFriendAction')?.addEventListener('click', runProfileFriendAction);
+$('editMyProfile')?.addEventListener('click', () => { closeProfileModal(); openEditProfile(); });
+$('closeEditProfile')?.addEventListener('click', closeEditProfile);
+$('editProfileModal')?.addEventListener('click', (event) => { if (event.target.dataset.closeEditProfile) closeEditProfile(); });
+$('editProfileChooseAvatar')?.addEventListener('click', pickAvatar);
+$('editProfileAdjustAvatar')?.addEventListener('click', openAvatarEditor);
+$('profileStatusInput')?.addEventListener('input', () => { $('profileStatusCount').textContent = `${$('profileStatusInput').value.length}/60`; });
+$('profileBioInput')?.addEventListener('input', () => { $('profileBioCount').textContent = `${$('profileBioInput').value.length}/160`; });
+$('saveProfile')?.addEventListener('click', saveProfileChanges);
+$('closeFriends')?.addEventListener('click', closeFriendsModal);
+$('friendsModal')?.addEventListener('click', (event) => { if (event.target.dataset.closeFriends) closeFriendsModal(); });
+$('friendSearchButton')?.addEventListener('click', searchFriends);
+$('friendSearchInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') searchFriends(); });
+$('closeTheme')?.addEventListener('click', closeThemeModal);
+$('themeModal')?.addEventListener('click', (event) => { if (event.target.dataset.closeTheme) closeThemeModal(); });
+$('themeColorPicker')?.addEventListener('input', () => applyThemeColor($('themeColorPicker').value));
+document.querySelectorAll('#themePresets [data-theme]').forEach((button) => button.addEventListener('click', () => applyThemeColor(button.dataset.theme)));
+$('saveTheme')?.addEventListener('click', saveThemeColor);
+
+socket.on('friend-request', ({ from }) => {
+  showToast(`${from || 'Alguém'} enviou um pedido de amizade.`);
+  loadFriends(false);
+});
+socket.on('friendship-updated', () => loadFriends(false));
+socket.on('profile-updated', ({ profile }) => {
+  if (!profile || profile.id !== state.account?.id) return;
+  state.account = { ...state.account, ...profile };
+  updateAccountUI();
+});
 
 function showUpdateBanner(title, message, connectionLost = false) {
   const banner = $('updateBanner');
@@ -310,6 +735,7 @@ $('authLogout')?.addEventListener('click', logoutAccount);
 $('authLoginTab')?.addEventListener('click', () => setAuthMode('login'));
 $('authRegisterTab')?.addEventListener('click', () => setAuthMode('register'));
 $('authRecoverTab')?.addEventListener('click', () => setAuthMode('recover'));
+$('authRemember')?.addEventListener('change', () => localStorage.setItem('lnz_remember_login', $('authRemember').checked ? '1' : '0'));
 $('forgotPasswordButton')?.addEventListener('click', () => setAuthMode('recover'));
 $('regenerateRecoveryCode')?.addEventListener('click', regenerateRecoveryCode);
 $('copyRecoveryCode')?.addEventListener('click', copyRecoveryCodeValue);
@@ -502,7 +928,7 @@ $('avatarInput').addEventListener('change', (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) return showToast('Escolha uma imagem válida.');
-  if (file.size > 320 * 1024) return showToast('Use uma imagem menor que 320 KB.');
+  if (file.size > 1400 * 1024) return showToast('Use uma imagem ou GIF menor que 1,4 MB.');
 
   const reader = new FileReader();
   reader.onload = () => {
@@ -512,6 +938,8 @@ $('avatarInput').addEventListener('change', (event) => {
     state.avatarOffsetY = 0;
     persistAvatarState();
     updateAvatarUI();
+    renderEditProfileAvatar();
+    saveAvatarToAccountSilently();
   };
   reader.readAsDataURL(file);
 });
@@ -528,6 +956,8 @@ $('removeAvatarLanding').addEventListener('click', () => {
   state.avatarOffsetY = 0;
   persistAvatarState();
   updateAvatarUI();
+  renderEditProfileAvatar();
+  saveAvatarToAccountSilently();
   showToast('Foto removida.');
 });
 
@@ -652,6 +1082,8 @@ $('saveAvatarEditor').addEventListener('click', () => {
   state.avatarOffsetY = clampAvatarAxis($('avatarPositionY').value);
   persistAvatarState();
   updateAvatarUI();
+  renderEditProfileAvatar();
+  saveAvatarToAccountSilently();
   closeAvatarEditor();
   showToast('Foto ajustada.');
 });
@@ -821,6 +1253,235 @@ function enterActiveRoom(result) {
   updateStage();
 }
 
+function participantById(id) {
+  return state.participants.find((person) => person.id === id) || null;
+}
+
+function renderCameraDock() {
+  const dock = $('cameraDock');
+  const grid = $('cameraGrid');
+  if (!dock || !grid) return;
+
+  const cameraPeople = state.participants.filter((person) => person.inVoice && (person.cameraOn || (person.id === state.me && state.cameraOn)));
+  dock.classList.toggle('hidden', cameraPeople.length === 0);
+  dock.classList.toggle('minimized', state.cameraDockMinimized);
+  if ($('cameraCountLabel')) $('cameraCountLabel').textContent = `${cameraPeople.length} câmera${cameraPeople.length === 1 ? '' : 's'}`;
+  if ($('toggleCameraDock')) $('toggleCameraDock').textContent = state.cameraDockMinimized ? '+' : '−';
+
+  const activeIds = new Set(cameraPeople.map((person) => person.id));
+  grid.querySelectorAll('.camera-card').forEach((card) => {
+    if (!activeIds.has(card.dataset.peerId)) {
+      const video = card.querySelector('video');
+      if (video) video.srcObject = null;
+      card.remove();
+    }
+  });
+
+  cameraPeople.forEach((person) => {
+    let card = grid.querySelector(`.camera-card[data-peer-id="${CSS.escape(person.id)}"]`);
+    if (!card) {
+      card = document.createElement('div');
+      card.className = 'camera-card';
+      card.dataset.peerId = person.id;
+
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = true;
+
+      const placeholder = document.createElement('div');
+      placeholder.className = 'camera-card-placeholder';
+      const avatar = document.createElement('div');
+      avatar.className = 'participant-avatar';
+      const placeholderText = document.createElement('span');
+      placeholder.append(avatar, placeholderText);
+
+      const footer = document.createElement('div');
+      footer.className = 'camera-card-footer';
+      const name = document.createElement('strong');
+      const status = document.createElement('span');
+      footer.append(name, status);
+
+      card.append(video, placeholder, footer);
+      grid.appendChild(card);
+    }
+
+    const video = card.querySelector('video');
+    const placeholder = card.querySelector('.camera-card-placeholder');
+    const avatar = placeholder.querySelector('.participant-avatar');
+    const placeholderText = placeholder.querySelector('span');
+    const name = card.querySelector('.camera-card-footer strong');
+    const status = card.querySelector('.camera-card-footer span');
+
+    const isLocal = person.id === state.me;
+    const hiddenForMe = !isLocal && state.cameraHiddenPeers.has(person.id);
+    const stream = isLocal ? state.voiceStream : state.voiceRemoteStreams.get(person.id);
+    const hasLiveVideo = Boolean(stream?.getVideoTracks?.().some((track) => track.readyState === 'live'));
+
+    card.classList.toggle('local', isLocal);
+    card.classList.toggle('speaking', Boolean(person.speaking && !person.micMuted));
+    card.classList.toggle('camera-hidden', hiddenForMe || !hasLiveVideo);
+    name.textContent = isLocal ? `${person.nickname} (você)` : person.nickname;
+    status.textContent = person.micMuted ? '🔇 Mic OFF' : (person.speaking ? '🟢 Falando' : '🎙 Na call');
+
+    avatar.innerHTML = '';
+    if (person.avatar) {
+      const img = document.createElement('img');
+      img.src = person.avatar;
+      img.alt = '';
+      img.style.setProperty('--avatar-scale', String(person.avatarScale || 1));
+      img.style.setProperty('--avatar-x', String(person.avatarOffsetX || 0));
+      img.style.setProperty('--avatar-y', String(person.avatarOffsetY || 0));
+      avatar.appendChild(img);
+    } else {
+      avatar.textContent = initials(person.nickname);
+    }
+
+    if (hiddenForMe) placeholderText.textContent = 'Câmera oculta para você';
+    else if (!hasLiveVideo) placeholderText.textContent = 'Conectando câmera...';
+    else placeholderText.textContent = '';
+
+    if (!hiddenForMe && hasLiveVideo) {
+      if (video.srcObject !== stream) video.srcObject = stream;
+      video.classList.remove('hidden');
+      placeholder.classList.add('hidden');
+      video.play().catch(() => {});
+    } else {
+      video.srcObject = null;
+      video.classList.add('hidden');
+      placeholder.classList.remove('hidden');
+    }
+  });
+}
+
+$('toggleCameraDock')?.addEventListener('click', () => {
+  state.cameraDockMinimized = !state.cameraDockMinimized;
+  renderCameraDock();
+});
+
+function closeParticipantMenu() {
+  const menu = $('participantMenu');
+  if (!menu) return;
+  menu.classList.add('hidden');
+  state.participantMenuTarget = null;
+}
+
+function renderParticipantMenu() {
+  const menu = $('participantMenu');
+  const person = participantById(state.participantMenuTarget);
+  if (!menu || !person) return closeParticipantMenu();
+
+  $('participantMenuName').textContent = person.nickname;
+  $('participantMenuStatus').textContent = person.inVoice
+    ? (person.serverMuted ? 'Na call • Mic bloqueado pelo dono' : (person.micMuted ? 'Na call • Mic OFF' : (person.speaking ? 'Falando agora' : 'Na call • Em silêncio')))
+    : (person.isSharer ? 'Compartilhando tela' : 'Conectado');
+
+  const avatar = $('participantMenuAvatar');
+  avatar.innerHTML = '';
+  if (person.avatar) {
+    const img = document.createElement('img');
+    img.src = person.avatar;
+    img.alt = '';
+    img.style.setProperty('--avatar-scale', String(person.avatarScale || 1));
+    img.style.setProperty('--avatar-x', String(person.avatarOffsetX || 0));
+    img.style.setProperty('--avatar-y', String(person.avatarOffsetY || 0));
+    avatar.appendChild(img);
+  } else avatar.textContent = initials(person.nickname);
+
+  const self = person.id === state.me;
+  const volumeWrap = $('participantVolumeWrap');
+  const volume = Math.round(voicePeerVolume(person.id) * 100);
+  volumeWrap.classList.toggle('hidden', self || !person.inVoice);
+  $('participantVolume').value = String(volume);
+  $('participantVolumeValue').textContent = `${volume}%`;
+
+  const mute = $('participantMuteForMe');
+  mute.classList.toggle('hidden', self || !person.inVoice);
+  mute.textContent = state.voicePeerMuted.has(person.id) ? '🔊 Voltar a ouvir' : '🔇 Silenciar para mim';
+
+  const hideCamera = $('participantHideCameraForMe');
+  hideCamera.classList.toggle('hidden', self || !person.cameraOn);
+  hideCamera.textContent = state.cameraHiddenPeers.has(person.id) ? '📹 Mostrar câmera para mim' : '📹 Ocultar câmera para mim';
+
+  const me = participantById(state.me);
+  const hostActions = $('participantHostActions');
+  const canModerate = Boolean(me?.isHost && !self);
+  hostActions.classList.toggle('hidden', !canModerate);
+  $('participantHostMute').disabled = !person.inVoice;
+  $('participantHostMute').textContent = person.serverMuted ? '🔓 Liberar microfone na sala' : '🔇 Silenciar na sala';
+}
+
+function openParticipantMenu(person, anchor) {
+  const menu = $('participantMenu');
+  if (!menu || !person) return;
+  state.participantMenuTarget = person.id;
+  renderParticipantMenu();
+  menu.classList.remove('hidden');
+  const rect = anchor.getBoundingClientRect();
+  const width = Math.min(320, window.innerWidth - 24);
+  let left = rect.right - width;
+  left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+  let top = rect.bottom + 6;
+  const estimatedHeight = 330;
+  if (top + estimatedHeight > window.innerHeight - 12) top = Math.max(12, rect.top - estimatedHeight - 6);
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
+$('closeParticipantMenu')?.addEventListener('click', closeParticipantMenu);
+$('participantViewProfile')?.addEventListener('click', () => {
+  const person = participantById(state.participantMenuTarget);
+  if (person) openUserProfile(person.nickname);
+  closeParticipantMenu();
+});
+$('participantVolume')?.addEventListener('input', () => {
+  const peerId = state.participantMenuTarget;
+  if (!peerId) return;
+  const value = Math.min(1, Math.max(0, Number($('participantVolume').value || 0) / 100));
+  state.voicePeerVolumes.set(peerId, value);
+  $('participantVolumeValue').textContent = `${Math.round(value * 100)}%`;
+  syncVoicePeerAudio(peerId);
+});
+$('participantMuteForMe')?.addEventListener('click', () => {
+  const peerId = state.participantMenuTarget;
+  if (!peerId) return;
+  if (state.voicePeerMuted.has(peerId)) state.voicePeerMuted.delete(peerId);
+  else state.voicePeerMuted.add(peerId);
+  syncVoicePeerAudio(peerId);
+  renderParticipantMenu();
+});
+$('participantHideCameraForMe')?.addEventListener('click', () => {
+  const peerId = state.participantMenuTarget;
+  if (!peerId) return;
+  if (state.cameraHiddenPeers.has(peerId)) state.cameraHiddenPeers.delete(peerId);
+  else state.cameraHiddenPeers.add(peerId);
+  renderCameraDock();
+  renderParticipantMenu();
+});
+$('participantHostMute')?.addEventListener('click', async () => {
+  const target = state.participantMenuTarget;
+  if (!target) return;
+  const result = await new Promise((resolve) => socket.emit('host-mute-participant', { target }, resolve));
+  if (!result?.ok) return showToast(result?.error || 'Não foi possível silenciar essa pessoa.');
+  showToast('Participante silenciado na call.');
+  closeParticipantMenu();
+});
+$('participantHostKick')?.addEventListener('click', async () => {
+  const person = participantById(state.participantMenuTarget);
+  if (!person) return;
+  if (!confirm(`Remover ${person.nickname} da sala?`)) return;
+  const result = await new Promise((resolve) => socket.emit('host-kick-participant', { target: person.id }, resolve));
+  if (!result?.ok) return showToast(result?.error || 'Não foi possível remover essa pessoa.');
+  showToast(`${person.nickname} foi removido da sala.`);
+  closeParticipantMenu();
+});
+document.addEventListener('pointerdown', (event) => {
+  const menu = $('participantMenu');
+  if (!menu || menu.classList.contains('hidden')) return;
+  if (menu.contains(event.target) || event.target.closest?.('.participant-more')) return;
+  closeParticipantMenu();
+});
+
 function renderRoom() {
   if (!state.room) return;
   const code = state.room.code;
@@ -876,9 +1537,11 @@ function renderRoom() {
     name.textContent = person.nickname;
     const sub = document.createElement('span');
     if (person.inVoice) {
-      if (person.micMuted) sub.textContent = 'Na call • Mic OFF';
-      else if (person.speaking) sub.textContent = 'Falando agora';
-      else sub.textContent = 'Na call • Em silêncio';
+      const cameraText = person.cameraOn ? ' • Câmera ON' : '';
+      if (person.serverMuted) sub.textContent = `Na call${cameraText} • Mic bloqueado`;
+      else if (person.micMuted) sub.textContent = `Na call${cameraText} • Mic OFF`;
+      else if (person.speaking) sub.textContent = `Falando agora${cameraText}`;
+      else sub.textContent = `Na call${cameraText} • Em silêncio`;
     } else if (person.isSharer) {
       sub.textContent = 'Compartilhando tela';
     } else {
@@ -892,15 +1555,32 @@ function renderRoom() {
     badges.className = 'participant-badges';
     if (person.isHost) badges.innerHTML += '<b title="Dono da sala">♛</b>';
     if (person.inVoice) {
-      if (person.micMuted) badges.innerHTML += '<span class="voice-badge muted" title="Na call com microfone desligado">🔇</span>';
+      if (person.cameraOn) badges.innerHTML += '<span class="voice-badge camera-badge" title="Câmera ligada">📹</span>';
+      if (person.serverMuted) badges.innerHTML += '<span class="voice-badge muted" title="Microfone bloqueado pelo dono">🔒</span>';
+      else if (person.micMuted) badges.innerHTML += '<span class="voice-badge muted" title="Na call com microfone desligado">🔇</span>';
       else if (person.speaking) badges.innerHTML += '<span class="voice-badge speaking" title="Falando agora">🔊</span>';
       else badges.innerHTML += '<span class="voice-badge" title="Na call de voz">🎙</span>';
     }
     if (person.id === state.me) badges.innerHTML += '<em>VOCÊ</em>';
 
-    row.append(avatar, details, badges);
+    const more = document.createElement('button');
+    more.className = 'participant-more';
+    more.type = 'button';
+    more.textContent = '⋯';
+    more.title = `Opções de ${person.nickname}`;
+    more.addEventListener('click', (event) => {
+      event.stopPropagation();
+      openParticipantMenu(person, more);
+    });
+
+    row.append(avatar, details, badges, more);
+    row.classList.add('profile-clickable');
+    row.title = `Abrir perfil de ${person.nickname}`;
+    row.addEventListener('click', () => openUserProfile(person.nickname));
     $('participantsList').appendChild(row);
   });
+  renderCameraDock();
+  if (state.participantMenuTarget) renderParticipantMenu();
 }
 
 function roomInviteLink() {
@@ -1203,6 +1883,22 @@ function removeVoiceAudio(peerId) {
     audio.remove();
   }
   state.voiceAudios.delete(peerId);
+  state.voiceRemoteStreams.delete(peerId);
+  renderCameraDock();
+}
+
+function voicePeerVolume(peerId) {
+  return Math.min(1, Math.max(0, Number(state.voicePeerVolumes.get(peerId) ?? 1)));
+}
+
+function syncVoicePeerAudio(peerId) {
+  const audio = state.voiceAudios.get(peerId);
+  if (!audio) return;
+  const individualMuted = state.voicePeerMuted.has(peerId);
+  const volume = state.voiceVolume * voicePeerVolume(peerId);
+  audio.muted = state.voiceOutputMuted || individualMuted || volume <= 0;
+  audio.volume = audio.muted ? 0 : Math.min(1, Math.max(0, volume));
+  if (!audio.muted) audio.play().catch(() => {});
 }
 
 function closeVoicePeer(peerId) {
@@ -1218,6 +1914,7 @@ function closeAllVoicePeers() {
 }
 
 function attachRemoteVoice(peerId, stream) {
+  state.voiceRemoteStreams.set(peerId, stream);
   let audio = state.voiceAudios.get(peerId);
   if (!audio) {
     audio = document.createElement('audio');
@@ -1228,9 +1925,8 @@ function attachRemoteVoice(peerId, stream) {
     state.voiceAudios.set(peerId, audio);
   }
   audio.srcObject = stream;
-  audio.muted = state.voiceOutputMuted;
-  audio.volume = state.voiceOutputMuted ? 0 : state.voiceVolume;
-  audio.play().catch(() => {});
+  syncVoicePeerAudio(peerId);
+  renderCameraDock();
 }
 
 async function flushVoiceIce(peerId, pc) {
@@ -1247,7 +1943,7 @@ async function createVoicePeer(peerId, initiator = false) {
 
   const pc = voicePeerConnection();
   state.voicePeers.set(peerId, pc);
-  state.voiceStream.getAudioTracks().forEach((track) => pc.addTrack(track, state.voiceStream));
+  state.voiceStream.getTracks().forEach((track) => pc.addTrack(track, state.voiceStream));
 
   pc.onicecandidate = (event) => {
     if (event.candidate) socket.emit('voice-signal', { target: peerId, data: { type: 'ice', candidate: event.candidate } });
@@ -1328,13 +2024,87 @@ function startVoiceSpeakingDetector(stream) {
 function updateVoiceControls() {
   const call = $('voiceCallControl');
   const mic = $('micControl');
+  const camera = $('cameraControl');
   if (!call || !mic) return;
   call.textContent = state.voiceJoined ? '📞 Sair da call' : '📞 Entrar na call';
   call.classList.toggle('voice-active', state.voiceJoined);
-  mic.disabled = !state.voiceJoined;
-  mic.textContent = state.voiceMuted ? '🔇 Mic OFF' : '🎙 Mic ON';
-  mic.classList.toggle('mic-muted', state.voiceMuted);
+  mic.disabled = !state.voiceJoined || state.voiceServerMuted;
+  mic.textContent = state.voiceServerMuted ? '🔒 Mic bloqueado' : (state.voiceMuted ? '🔇 Mic OFF' : '🎙 Mic ON');
+  mic.classList.toggle('mic-muted', state.voiceMuted || state.voiceServerMuted);
+  if (camera) {
+    camera.disabled = !state.voiceJoined;
+    camera.textContent = state.cameraOn ? '📹 Câmera ON' : '📹 Câmera OFF';
+    camera.classList.toggle('camera-on', state.cameraOn);
+  }
 }
+
+async function renegotiateVoicePeer(peerId, retry = 0) {
+  const pc = state.voicePeers.get(peerId);
+  if (!pc) return;
+  if (pc.signalingState !== 'stable') {
+    if (retry < 5) setTimeout(() => renegotiateVoicePeer(peerId, retry + 1), 300);
+    return;
+  }
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('voice-signal', { target: peerId, data: { type: 'offer', sdp: pc.localDescription } });
+  } catch {}
+}
+
+async function startCamera() {
+  if (!state.voiceJoined || !state.voiceStream || state.cameraOn) return;
+  if (!navigator.mediaDevices?.getUserMedia) return showToast('Seu navegador não permite usar a câmera.');
+  try {
+    const cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } },
+      audio: false
+    });
+    const track = cameraStream.getVideoTracks()[0];
+    if (!track) return;
+    state.cameraTrack = track;
+    state.cameraOn = true;
+    state.voiceStream.addTrack(track);
+    track.addEventListener('ended', () => stopCamera(true), { once: true });
+
+    for (const [peerId, pc] of state.voicePeers.entries()) {
+      pc.addTrack(track, state.voiceStream);
+      renegotiateVoicePeer(peerId);
+    }
+    socket.emit('voice-camera-state', { on: true }, () => {});
+    updateVoiceControls();
+    renderCameraDock();
+    showToast('Câmera ligada.');
+  } catch (error) {
+    if (error?.name === 'NotAllowedError') showToast('Permita o acesso à câmera.');
+    else showToast('Não foi possível abrir a câmera.');
+  }
+}
+
+function stopCamera(notifyServer = true) {
+  if (!state.cameraOn && !state.cameraTrack) return;
+  const track = state.cameraTrack;
+  for (const [peerId, pc] of state.voicePeers.entries()) {
+    const sender = pc.getSenders().find((item) => item.track === track || item.track?.kind === 'video');
+    if (sender) {
+      try { pc.removeTrack(sender); } catch {}
+      renegotiateVoicePeer(peerId);
+    }
+  }
+  try { state.voiceStream?.removeTrack(track); } catch {}
+  try { track?.stop(); } catch {}
+  state.cameraTrack = null;
+  state.cameraOn = false;
+  if (notifyServer) socket.emit('voice-camera-state', { on: false }, () => {});
+  updateVoiceControls();
+  renderCameraDock();
+}
+
+$('cameraControl')?.addEventListener('click', () => {
+  if (!state.voiceJoined) return;
+  if (state.cameraOn) stopCamera(true);
+  else startCamera();
+});
 
 async function joinVoiceCall() {
   if (!state.room || state.voiceJoined) return;
@@ -1360,6 +2130,7 @@ async function joinVoiceCall() {
     state.voiceStream = stream;
     state.voiceJoined = true;
     state.voiceMuted = false;
+    state.voiceServerMuted = false;
     startVoiceSpeakingDetector(stream);
     updateVoiceControls();
     showToast('Você entrou na call de voz.');
@@ -1377,20 +2148,32 @@ async function leaveVoiceCall(notifyServer = true) {
   if (notifyServer && state.voiceJoined) {
     await new Promise((resolve) => socket.emit('leave-voice', {}, resolve));
   }
+  stopCamera(false);
   closeAllVoicePeers();
   stopVoiceSpeakingDetector(true);
   state.voiceStream?.getTracks().forEach((track) => track.stop());
   state.voiceStream = null;
   state.voiceJoined = false;
   state.voiceMuted = false;
+  state.voiceServerMuted = false;
   updateVoiceControls();
 }
 
-function toggleVoiceMic() {
+async function toggleVoiceMic() {
   if (!state.voiceJoined || !state.voiceStream) return;
-  state.voiceMuted = !state.voiceMuted;
+  if (state.voiceServerMuted) return showToast('Seu microfone está bloqueado pelo dono da sala.');
+  const nextMuted = !state.voiceMuted;
+  const result = await new Promise((resolve) => socket.emit('voice-mic-state', { muted: nextMuted }, resolve));
+  if (!result?.ok) {
+    if (result?.serverMuted) state.voiceServerMuted = true;
+    state.voiceMuted = true;
+    state.voiceStream.getAudioTracks().forEach((track) => { track.enabled = false; });
+    setLocalSpeakingState(false);
+    updateVoiceControls();
+    return showToast(result?.error || 'Não foi possível alterar o microfone.');
+  }
+  state.voiceMuted = nextMuted;
   state.voiceStream.getAudioTracks().forEach((track) => { track.enabled = !state.voiceMuted; });
-  socket.emit('voice-mic-state', { muted: state.voiceMuted }, () => {});
   if (state.voiceMuted) setLocalSpeakingState(false);
   updateVoiceControls();
 }
@@ -1401,8 +2184,51 @@ $('voiceCallControl').addEventListener('click', () => {
 });
 $('micControl').addEventListener('click', toggleVoiceMic);
 
+socket.on('voice-force-muted', () => {
+  if (!state.voiceJoined || !state.voiceStream) return;
+  state.voiceServerMuted = true;
+  state.voiceMuted = true;
+  state.voiceStream.getAudioTracks().forEach((track) => { track.enabled = false; });
+  setLocalSpeakingState(false);
+  updateVoiceControls();
+  showToast('O dono da sala bloqueou seu microfone.');
+});
+
+socket.on('voice-server-mute-released', () => {
+  state.voiceServerMuted = false;
+  state.voiceMuted = true;
+  updateVoiceControls();
+  showToast('O dono liberou seu microfone. Clique em Mic OFF para ligá-lo quando quiser.');
+});
+
+socket.on('kicked-from-room', async ({ reason } = {}) => {
+  stopSharing(false);
+  await leaveVoiceCall(false);
+  closeAllInboundPeers();
+  state.room = null;
+  state.me = null;
+  state.participants = [];
+  state.chatMessages = [];
+  state.sharerIds.clear();
+  state.inboundStreams.clear();
+  state.cameraHiddenPeers.clear();
+  state.voicePeerMuted.clear();
+  state.voicePeerVolumes.clear();
+  closeParticipantMenu();
+  $('cameraGrid').innerHTML = '';
+  $('cameraDock').classList.add('hidden');
+  history.replaceState({}, '', '/');
+  setView('landing');
+  loadPublicRooms();
+  showToast(reason || 'Você foi removido da sala.');
+});
+
 socket.on('voice-user-left', ({ userId }) => {
   closeVoicePeer(userId);
+  state.voicePeerMuted.delete(userId);
+  state.voicePeerVolumes.delete(userId);
+  state.cameraHiddenPeers.delete(userId);
+  renderCameraDock();
 });
 
 socket.on('voice-signal', async ({ from, data }) => {
@@ -1543,11 +2369,7 @@ function syncTransmissionAudio() {
 }
 
 function syncVoiceOutputVolume() {
-  for (const audio of state.voiceAudios.values()) {
-    audio.muted = state.voiceOutputMuted || state.voiceVolume <= 0;
-    audio.volume = audio.muted ? 0 : state.voiceVolume;
-    if (!audio.muted) audio.play().catch(() => {});
-  }
+  for (const peerId of state.voiceAudios.keys()) syncVoicePeerAudio(peerId);
 }
 
 function updateMixerUI() {
@@ -1835,6 +2657,12 @@ async function leaveRoom() {
   state.unreadChat = 0;
   state.sharerIds.clear();
   state.inboundStreams.clear();
+  state.voicePeerMuted.clear();
+  state.voicePeerVolumes.clear();
+  state.cameraHiddenPeers.clear();
+  closeParticipantMenu();
+  $('cameraGrid').innerHTML = '';
+  $('cameraDock').classList.add('hidden');
   clearSelectedChatFile();
   closeChat();
   updateChatUnread();
@@ -1849,6 +2677,14 @@ socket.on('room-state', ({ room, participants, sharerIds }) => {
   if (!state.room || room.code !== state.room.code) return;
   state.room = room;
   state.participants = participants || [];
+  const currentVoiceMe = state.participants.find((person) => person.id === state.me);
+  if (currentVoiceMe) {
+    state.voiceServerMuted = Boolean(currentVoiceMe.serverMuted);
+    if (state.voiceServerMuted) {
+      state.voiceMuted = true;
+      state.voiceStream?.getAudioTracks().forEach((track) => { track.enabled = false; });
+    }
+  }
   state.sharerIds = new Set(sharerIds || []);
   if (state.isSharing && state.me) state.sharerIds.add(state.me);
 
@@ -2095,8 +2931,114 @@ $('feedbackMessage').addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') submitFeedback();
 });
 
+
+function adminDate(value) {
+  if (!value) return '—';
+  try { return new Date(Number(value)).toLocaleString('pt-BR'); } catch { return '—'; }
+}
+
+function adminActionLabel(action) {
+  const labels = {
+    'auth.register': 'Conta criada',
+    'auth.login': 'Login realizado',
+    'auth.logout': 'Logout',
+    'auth.recover': 'Senha recuperada',
+    'room.create': 'Sala criada',
+    'room.join': 'Entrou na sala',
+    'room.leave': 'Saiu da sala',
+    'room.open': 'Sala aberta',
+    'room.close': 'Sala fechada',
+    'stream.start': 'Iniciou transmissão',
+    'stream.stop': 'Parou transmissão',
+    'voice.join': 'Entrou na call',
+    'voice.leave': 'Saiu da call',
+    'chat.message': 'Enviou mensagem no chat',
+    'feedback.submit': 'Enviou feedback',
+    'system.start': 'Site iniciado / atualizado'
+  };
+  return labels[action] || action || 'Atividade';
+}
+
+function setAdminTab(tab) {
+  state.adminTab = ['users','rooms','feedbacks'].includes(tab) ? tab : 'logs';
+  document.querySelectorAll('.admin-tab').forEach((button) => button.classList.toggle('active', button.dataset.adminTab === state.adminTab));
+  ['Logs','Users','Rooms','Feedbacks'].forEach((name) => {
+    const id = `adminTab${name}`;
+    $(id)?.classList.toggle('hidden', name.toLowerCase() !== state.adminTab);
+  });
+}
+
+function renderAdminDashboard(data) {
+  const stats = data?.stats || {};
+  if ($('adminStatUsers')) $('adminStatUsers').textContent = String(stats.users || 0);
+  if ($('adminStatOnline')) $('adminStatOnline').textContent = String(stats.onlineUsers || 0);
+  if ($('adminStatRooms')) $('adminStatRooms').textContent = String(stats.activeRooms || 0);
+  if ($('adminStatStreams')) $('adminStatStreams').textContent = String(stats.activeStreams || 0);
+  if ($('adminStatSessions')) $('adminStatSessions').textContent = String(stats.activeSessions || 0);
+  if ($('adminStatFeedbacks')) $('adminStatFeedbacks').textContent = String(stats.feedbacks || 0);
+  if ($('adminDatabaseBadge')) $('adminDatabaseBadge').textContent = data?.database === 'postgres' ? 'Banco: PostgreSQL conectado' : 'Banco: memória temporária';
+
+  const logs = Array.isArray(data?.logs) ? data.logs : [];
+  $('adminLogsList').innerHTML = logs.length ? logs.map((item) => {
+    const details = item.details && Object.keys(item.details).length ? escapeHtml(JSON.stringify(item.details)) : 'Sem detalhes adicionais';
+    return `<div class="admin-row admin-log-row"><div><strong>${escapeHtml(adminActionLabel(item.action))}</strong><span>${escapeHtml(item.username || 'Sistema')}${item.roomCode ? ` • Sala ${escapeHtml(item.roomCode)}` : ''}</span></div><div class="admin-row-right"><small>${escapeHtml(adminDate(item.createdAt))}</small><em>${details}</em></div></div>`;
+  }).join('') : '<div class="admin-empty">Nenhum registro ainda.</div>';
+
+  const users = Array.isArray(data?.users) ? data.users : [];
+  $('adminUsersList').innerHTML = users.length ? users.map((user) => `
+    <div class="admin-row"><div><strong>${escapeHtml(user.username || 'Usuário')}</strong><span>${user.online ? '● Online' : '○ Offline'}</span></div><div class="admin-row-right"><small>Criado: ${escapeHtml(adminDate(user.createdAt))}</small><em>Último login: ${escapeHtml(adminDate(user.lastLoginAt))}</em></div></div>
+  `).join('') : '<div class="admin-empty">Nenhuma conta cadastrada.</div>';
+
+  const rooms = Array.isArray(data?.rooms) ? data.rooms : [];
+  $('adminRoomsList').innerHTML = rooms.length ? rooms.map((room) => `
+    <div class="admin-row"><div><strong>${escapeHtml(room.code)}</strong><span>${room.visibility === 'private' ? '🔒 Privada' : '◎ Pública'} • ${room.isOpen ? 'Aberta' : 'Fechada'}</span></div><div class="admin-row-right"><small>${Number(room.participants || 0)} participante(s)</small><em>${Number(room.sharers || 0)} transmissão(ões) • ${escapeHtml(adminDate(room.createdAt))}</em></div></div>
+  `).join('') : '<div class="admin-empty">Nenhuma sala ativa.</div>';
+
+  const feedbacks = Array.isArray(data?.feedbacks) ? data.feedbacks : [];
+  $('adminFeedbacksList').innerHTML = feedbacks.length ? feedbacks.map((item) => `
+    <div class="admin-row admin-feedback-row"><div><strong>${escapeHtml(item.nickname || 'Usuário LNZ')} • ${Number(item.rating || 0)}/5</strong><span>${escapeHtml(item.type || 'feedback')}${item.roomCode ? ` • Sala ${escapeHtml(item.roomCode)}` : ''}</span><p>${escapeHtml(item.message || '')}</p></div><div class="admin-row-right"><small>${escapeHtml(adminDate(item.createdAt))}</small><em>${item.contact ? `Contato: ${escapeHtml(item.contact)}` : 'Sem contato'}</em></div></div>
+  `).join('') : '<div class="admin-empty">Nenhum feedback recebido.</div>';
+}
+
+async function loadAdminDashboard() {
+  if (!state.account?.isAdmin) return;
+  const refresh = $('refreshAdminPanel');
+  if (refresh) { refresh.disabled = true; refresh.textContent = 'Atualizando...'; }
+  try {
+    const response = await fetch('/api/admin/dashboard', { credentials: 'same-origin', cache: 'no-store' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.ok) throw new Error(data?.error || 'Acesso negado.');
+    renderAdminDashboard(data);
+  } catch (error) {
+    showToast(error?.message || 'Não foi possível carregar o painel admin.');
+  } finally {
+    if (refresh) { refresh.disabled = false; refresh.textContent = '↻ Atualizar'; }
+  }
+}
+
+async function openAdminPanel() {
+  if (!state.account?.isAdmin) return showToast('Esse painel é restrito ao administrador.');
+  $('adminPanelModal')?.classList.remove('hidden');
+  $('adminPanelModal')?.setAttribute('aria-hidden', 'false');
+  setAdminTab(state.adminTab);
+  await loadAdminDashboard();
+}
+
+function closeAdminPanel() {
+  $('adminPanelModal')?.classList.add('hidden');
+  $('adminPanelModal')?.setAttribute('aria-hidden', 'true');
+}
+
+$('adminPanelButton')?.addEventListener('click', openAdminPanel);
+$('railAdmin')?.addEventListener('click', openAdminPanel);
+$('closeAdminPanel')?.addEventListener('click', closeAdminPanel);
+$('refreshAdminPanel')?.addEventListener('click', loadAdminDashboard);
+$('adminPanelModal')?.addEventListener('click', (event) => { if (event.target.dataset.closeAdmin) closeAdminPanel(); });
+document.querySelectorAll('.admin-tab').forEach((button) => button.addEventListener('click', () => setAdminTab(button.dataset.adminTab)));
+
 async function initApp() {
   $('year').textContent = new Date().getFullYear();
+  if ($('authRemember')) $('authRemember').checked = localStorage.getItem('lnz_remember_login') === '1';
   updateAudioControl();
   updateMixerUI();
   applyDiscordLinks();
@@ -2105,7 +3047,52 @@ async function initApp() {
   await checkAppVersion();
   await loadAccount();
   await loadPublicRooms();
-  if (state.account) await routeFromLocation();
+  if (state.account) {
+    await loadFriends(false);
+    await routeFromLocation();
+  }
 }
 
 initApp();
+
+// Atalhos laterais inspirados na organização de apps sociais/Discord.
+function setDiscordChannelActive(target) {
+  ['railStream', 'railChat', 'railCall', 'channelStream', 'channelChat', 'channelCall'].forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    const isTarget = id.toLowerCase().includes(target);
+    el.classList.toggle('active', isTarget);
+  });
+}
+
+$('railHome')?.addEventListener('click', () => leaveRoom());
+$('railFriends')?.addEventListener('click', openFriendsModal);
+$('railProfile')?.addEventListener('click', () => openUserProfile(state.account?.username));
+$('railTheme')?.addEventListener('click', openThemeModal);
+
+$('railStream')?.addEventListener('click', () => {
+  closeChat();
+  setDiscordChannelActive('stream');
+});
+$('channelStream')?.addEventListener('click', () => {
+  closeChat();
+  setDiscordChannelActive('stream');
+});
+
+$('railChat')?.addEventListener('click', () => {
+  openChat();
+  setDiscordChannelActive('chat');
+});
+$('channelChat')?.addEventListener('click', () => {
+  openChat();
+  setDiscordChannelActive('chat');
+});
+
+$('railCall')?.addEventListener('click', () => {
+  if (!state.voiceJoined) joinVoiceCall();
+  setDiscordChannelActive('call');
+});
+$('channelCall')?.addEventListener('click', () => {
+  if (!state.voiceJoined) joinVoiceCall();
+  setDiscordChannelActive('call');
+});

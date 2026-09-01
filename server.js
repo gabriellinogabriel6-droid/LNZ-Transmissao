@@ -27,6 +27,21 @@ let databaseReady = false;
 const memoryUsers = new Map();
 const memorySessions = new Map();
 const memoryFriendships = new Map();
+const memorySiteLogs = [];
+const MAX_MEMORY_SITE_LOGS = 500;
+
+function persistentAccountsRequired() {
+  return Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.NODE_ENV === 'production');
+}
+
+function ensurePersistentAccountStorage(res) {
+  if (databaseReady || !persistentAccountsRequired()) return true;
+  res.status(503).json({
+    ok: false,
+    error: 'O banco de dados ainda não está conectado. Configure DATABASE_URL no Render para salvar as contas permanentemente.'
+  });
+  return false;
+}
 
 function calculateAppVersion() {
   try {
@@ -50,6 +65,42 @@ function cleanAccountUsername(value) {
   const username = String(value || '').trim().replace(/\s+/g, '').slice(0, 24);
   if (!/^[A-Za-z0-9_.-]{3,24}$/.test(username)) return '';
   return username;
+}
+
+function isAdminUser(user) {
+  const configured = cleanAccountUsername(process.env.ADMIN_USERNAME || '').toLowerCase();
+  if (!configured || !user?.username) return false;
+  return String(user.username).trim().toLowerCase() === configured;
+}
+
+function cleanLogText(value, max = 80) {
+  return String(value || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
+}
+
+async function logActivity({ userId = null, username = '', action = '', roomCode = '', details = {} } = {}) {
+  const item = {
+    id: crypto.randomUUID(),
+    userId: userId || null,
+    username: cleanLogText(username, 24),
+    action: cleanLogText(action, 64) || 'site.event',
+    roomCode: cleanLogText(roomCode, 9).toUpperCase(),
+    details: details && typeof details === 'object' ? details : {},
+    createdAt: Date.now()
+  };
+  if (databaseReady) {
+    try {
+      await dbPool.query(
+        'INSERT INTO site_logs (id,user_id,username,action,room_code,details,created_at) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)',
+        [item.id, item.userId, item.username || null, item.action, item.roomCode || null, JSON.stringify(item.details || {}), new Date(item.createdAt)]
+      );
+    } catch (error) {
+      console.error('[Logs] Falha ao salvar:', error?.message || error);
+    }
+  } else {
+    memorySiteLogs.push(item);
+    while (memorySiteLogs.length > MAX_MEMORY_SITE_LOGS) memorySiteLogs.shift();
+  }
+  return item;
 }
 
 function validateAccountPassword(value) {
@@ -113,10 +164,10 @@ function sessionTokenHash(token) {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
 
-function setSessionCookie(res, token) {
-  const maxAge = 30 * 24 * 60 * 60;
+function setSessionCookie(res, token, remember = false) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `lnz_session=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`);
+  const persistent = remember ? `; Max-Age=${90 * 24 * 60 * 60}` : '';
+  res.setHeader('Set-Cookie', `lnz_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax${secure}${persistent}`);
 }
 
 function clearSessionCookie(res) {
@@ -185,6 +236,18 @@ async function initDatabase() {
         room_code VARCHAR(9),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS site_logs (
+        id UUID PRIMARY KEY,
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        username VARCHAR(24),
+        action VARCHAR(64) NOT NULL,
+        room_code VARCHAR(9),
+        details JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS site_logs_created_idx ON site_logs(created_at DESC);
+      CREATE INDEX IF NOT EXISTS site_logs_user_idx ON site_logs(user_id);
+      CREATE INDEX IF NOT EXISTS site_logs_action_idx ON site_logs(action);
     `);
     databaseReady = true;
     const { rows } = await dbPool.query(`SELECT id,type,rating,message,contact,nickname,room_code,created_at FROM feedbacks ORDER BY created_at DESC LIMIT 200`);
@@ -272,7 +335,7 @@ async function getFriendshipBetween(a,b) {
   const [x,y]=friendPair(a,b);
   if (databaseReady) {
     const { rows } = await dbPool.query('SELECT user_a,user_b,requested_by,status,created_at,updated_at FROM friendships WHERE user_a=$1 AND user_b=$2 LIMIT 1',[x,y]);
-    return profileFromRow(rows[0]);
+    return rows[0] || null;
   }
   return memoryFriendships.get(memoryFriendKey(a,b)) || null;
 }
@@ -379,10 +442,13 @@ async function authenticateUser(username, password) {
   return profileFromRow(row);
 }
 
-async function createSessionForUser(user) {
+async function createSessionForUser(user, remember = false) {
   const token = crypto.randomBytes(32).toString('hex');
   const tokenHash = sessionTokenHash(token);
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const lifetimeMs = remember
+    ? 90 * 24 * 60 * 60 * 1000
+    : 24 * 60 * 60 * 1000;
+  const expiresAt = new Date(Date.now() + lifetimeMs);
   if (databaseReady) {
     await dbPool.query('INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2,$3)', [tokenHash, user.id, expiresAt]);
   } else {
@@ -400,7 +466,7 @@ async function currentUserFromRequest(req) {
       SELECT u.id,u.username,u.avatar,u.avatar_scale,u.avatar_x,u.avatar_y,u.bio,u.status_text,u.theme_color,u.created_at FROM sessions s JOIN users u ON u.id=s.user_id
       WHERE s.token_hash=$1 AND s.expires_at > NOW() LIMIT 1
     `, [tokenHash]);
-    return rows[0] || null;
+    return profileFromRow(rows[0]);
   }
   const session = memorySessions.get(tokenHash);
   if (!session || session.expiresAt <= Date.now()) {
@@ -421,56 +487,65 @@ async function destroySession(req) {
 app.get('/api/auth/me', async (req, res) => {
   try {
     const user = await currentUserFromRequest(req);
-    res.json({ ok: true, user, persistentDatabase: databaseReady });
+    res.json({ ok: true, user: user ? { ...user, isAdmin: isAdminUser(user) } : null, persistentDatabase: databaseReady });
   } catch {
     res.status(500).json({ ok: false, error: 'Não foi possível consultar sua conta.' });
   }
 });
 
 app.post('/api/auth/register', async (req, res) => {
+  if (!ensurePersistentAccountStorage(res)) return;
   const username = cleanAccountUsername(req.body?.username);
   const password = validateAccountPassword(req.body?.password);
+  const remember = Boolean(req.body?.remember);
   if (!username) return res.status(400).json({ ok: false, error: 'Use um login de 3 a 24 caracteres: letras, números, ponto, hífen ou _.' });
   if (!password) return res.status(400).json({ ok: false, error: 'A senha precisa ter entre 6 e 72 caracteres.' });
   try {
     const created = await createUserAccount(username, password);
-    const token = await createSessionForUser(created.user);
-    setSessionCookie(res, token);
-    res.json({ ok: true, user: created.user, recoveryCode: created.recoveryCode, persistentDatabase: databaseReady });
+    const token = await createSessionForUser(created.user, remember);
+    setSessionCookie(res, token, remember);
+    logActivity({ userId: created.user.id, username: created.user.username, action: 'auth.register' }).catch(() => {});
+    res.json({ ok: true, user: { ...created.user, isAdmin: isAdminUser(created.user) }, recoveryCode: created.recoveryCode, persistentDatabase: databaseReady });
   } catch (error) {
     res.status(400).json({ ok: false, error: error?.message || 'Não foi possível criar a conta.' });
   }
 });
 
 app.post('/api/auth/login', async (req, res) => {
+  if (!ensurePersistentAccountStorage(res)) return;
   const username = cleanAccountUsername(req.body?.username);
   const password = validateAccountPassword(req.body?.password);
+  const remember = Boolean(req.body?.remember);
   if (!username || !password) return res.status(400).json({ ok: false, error: 'Login ou senha inválidos.' });
   try {
     const user = await authenticateUser(username, password);
     if (!user) return res.status(401).json({ ok: false, error: 'Login ou senha incorretos.' });
-    const token = await createSessionForUser(user);
-    setSessionCookie(res, token);
-    res.json({ ok: true, user, persistentDatabase: databaseReady });
+    const token = await createSessionForUser(user, remember);
+    setSessionCookie(res, token, remember);
+    logActivity({ userId: user.id, username: user.username, action: 'auth.login' }).catch(() => {});
+    res.json({ ok: true, user: { ...user, isAdmin: isAdminUser(user) }, persistentDatabase: databaseReady });
   } catch {
     res.status(500).json({ ok: false, error: 'Não foi possível entrar na conta.' });
   }
 });
 
 app.post('/api/auth/recover', async (req, res) => {
+  if (!ensurePersistentAccountStorage(res)) return;
   if (!allowRecoveryAttempt(req)) return res.status(429).json({ ok: false, error: 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' });
   const username = cleanAccountUsername(req.body?.username);
   const recoveryCode = String(req.body?.recoveryCode || '').trim();
   const password = validateAccountPassword(req.body?.password);
+  const remember = Boolean(req.body?.remember);
   if (!username || normalizeRecoveryCode(recoveryCode).length < 16 || !password) {
     return res.status(400).json({ ok: false, error: 'Confira o login, o código de recuperação e a nova senha.' });
   }
   try {
     const recovered = await recoverUserAccount(username, recoveryCode, password);
     if (!recovered) return res.status(401).json({ ok: false, error: 'Login ou código de recuperação incorretos.' });
-    const token = await createSessionForUser(recovered.user);
-    setSessionCookie(res, token);
-    res.json({ ok: true, user: recovered.user, recoveryCode: recovered.recoveryCode, persistentDatabase: databaseReady });
+    const token = await createSessionForUser(recovered.user, remember);
+    setSessionCookie(res, token, remember);
+    logActivity({ userId: recovered.user.id, username: recovered.user.username, action: 'auth.recover' }).catch(() => {});
+    res.json({ ok: true, user: { ...recovered.user, isAdmin: isAdminUser(recovered.user) }, recoveryCode: recovered.recoveryCode, persistentDatabase: databaseReady });
   } catch (error) {
     console.error('[Conta] Falha na recuperação:', error?.message || error);
     res.status(500).json({ ok: false, error: 'Não foi possível recuperar a conta agora.' });
@@ -489,7 +564,10 @@ app.post('/api/auth/recovery-code/regenerate', async (req, res) => {
 });
 
 app.post('/api/auth/logout', async (req, res) => {
+  let user = null;
+  try { user = await currentUserFromRequest(req); } catch {}
   try { await destroySession(req); } catch {}
+  if (user) logActivity({ userId: user.id, username: user.username, action: 'auth.logout' }).catch(() => {});
   clearSessionCookie(res);
   res.json({ ok: true });
 });
@@ -688,11 +766,92 @@ app.get('/config.js', (_req, res) => {
 });
 
 
-app.get('/admin/feedback', (req, res) => {
-  const configured = String(process.env.FEEDBACK_ADMIN_TOKEN || '').trim();
-  const supplied = String(req.query.token || '').trim();
-  if (!configured || supplied !== configured) return res.status(403).json({ ok: false, error: 'Acesso negado.' });
-  res.json({ ok: true, feedbacks: feedbackItems.slice().reverse() });
+app.get('/api/admin/dashboard', async (req, res) => {
+  try {
+    const admin = await currentUserFromRequest(req);
+    if (!admin || !isAdminUser(admin)) return res.status(403).json({ ok: false, error: 'Acesso restrito ao administrador.' });
+
+    let users = [];
+    let logs = [];
+    let activeSessions = 0;
+    if (databaseReady) {
+      const [usersResult, logsResult, sessionsResult] = await Promise.all([
+        dbPool.query('SELECT id,username,created_at,last_login_at FROM users ORDER BY created_at DESC LIMIT 250'),
+        dbPool.query('SELECT id,user_id,username,action,room_code,details,created_at FROM site_logs ORDER BY created_at DESC LIMIT 300'),
+        dbPool.query('SELECT COUNT(*)::int AS count FROM sessions WHERE expires_at > NOW()')
+      ]);
+      users = usersResult.rows.map((row) => ({
+        id: row.id,
+        username: row.username,
+        createdAt: row.created_at ? new Date(row.created_at).getTime() : null,
+        lastLoginAt: row.last_login_at ? new Date(row.last_login_at).getTime() : null,
+        online: isUserOnline(row.id)
+      }));
+      logs = logsResult.rows.map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        username: row.username || '',
+        action: row.action,
+        roomCode: row.room_code || '',
+        details: row.details || {},
+        createdAt: new Date(row.created_at).getTime()
+      }));
+      activeSessions = Number(sessionsResult.rows?.[0]?.count || 0);
+    } else {
+      users = [...memoryUsers.values()].map((row) => ({
+        id: row.id,
+        username: row.username,
+        createdAt: row.createdAt || null,
+        lastLoginAt: null,
+        online: isUserOnline(row.id)
+      })).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+      logs = memorySiteLogs.slice().reverse().slice(0, 300);
+      activeSessions = [...memorySessions.values()].filter((item) => item.expiresAt > Date.now()).length;
+    }
+
+    const liveRooms = [...rooms.values()].map((room) => ({
+      code: room.code,
+      visibility: room.visibility,
+      isOpen: room.isOpen !== false,
+      participants: room.participants.size,
+      sharers: room.sharerIds?.size || 0,
+      createdAt: room.createdAt
+    })).sort((a,b) => b.createdAt - a.createdAt);
+
+    const onlineUserIds = new Set();
+    for (const socket of io.sockets.sockets.values()) if (socket.data?.account?.id) onlineUserIds.add(socket.data.account.id);
+
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      ok: true,
+      database: databaseReady ? 'postgres' : 'memory',
+      stats: {
+        users: users.length,
+        onlineUsers: onlineUserIds.size,
+        activeSessions,
+        activeRooms: rooms.size,
+        activeStreams: liveRooms.reduce((sum, room) => sum + room.sharers, 0),
+        feedbacks: feedbackItems.length
+      },
+      users,
+      rooms: liveRooms,
+      feedbacks: feedbackItems.slice().reverse().slice(0, 80),
+      logs
+    });
+  } catch (error) {
+    console.error('[Admin] Falha ao carregar painel:', error?.message || error);
+    res.status(500).json({ ok: false, error: 'Não foi possível carregar o painel administrativo.' });
+  }
+});
+
+app.get('/admin/feedback', async (req, res) => {
+  try {
+    const admin = await currentUserFromRequest(req);
+    if (!admin || !isAdminUser(admin)) return res.status(403).json({ ok: false, error: 'Acesso negado.' });
+    res.json({ ok: true, feedbacks: feedbackItems.slice().reverse() });
+  } catch {
+    res.status(500).json({ ok: false, error: 'Não foi possível carregar os feedbacks.' });
+  }
 });
 
 // Permite abrir links como /room/ABCD-1234 diretamente.
@@ -939,6 +1098,8 @@ function participantView(id, participant, room) {
     isSharer: Boolean(room.sharerIds?.has(id)),
     inVoice: Boolean(participant.inVoice),
     micMuted: Boolean(participant.micMuted),
+    serverMuted: Boolean(participant.serverMuted),
+    cameraOn: Boolean(participant.cameraOn),
     speaking: Boolean(participant.speaking) && Boolean(participant.inVoice) && !Boolean(participant.micMuted)
   };
 }
@@ -976,6 +1137,7 @@ function removeSocketFromRoom(socket, reason = 'left') {
   if (!room) return;
 
   const leavingParticipant = room.participants.get(socket.id);
+  if (leavingParticipant) logActivity({ userId: leavingParticipant.userId, username: leavingParticipant.nickname, action: 'room.leave', roomCode: code, details: { reason } }).catch(() => {});
   if (leavingParticipant?.inVoice) {
     socket.to(code).emit('voice-user-left', { userId: socket.id });
   }
@@ -1072,6 +1234,7 @@ io.on('connection', async (socket) => {
     rooms.set(code, room);
     socket.join(code);
     socket.data.roomCode = code;
+    logActivity({ userId: account.id, username: account.username, action: 'room.create', roomCode: code, details: { visibility: mode } }).catch(() => {});
 
     callback({
       ok: true,
@@ -1117,6 +1280,7 @@ io.on('connection', async (socket) => {
     });
     socket.join(code);
     socket.data.roomCode = code;
+    logActivity({ userId: account.id, username: account.username, action: 'room.join', roomCode: code, details: { visibility: room.visibility } }).catch(() => {});
 
     callback({
       ok: true,
@@ -1146,6 +1310,8 @@ io.on('connection', async (socket) => {
     }
 
     room.isOpen = Boolean(open);
+    const accessParticipant = room.participants.get(socket.id);
+    logActivity({ userId: accessParticipant?.userId, username: accessParticipant?.nickname, action: room.isOpen ? 'room.open' : 'room.close', roomCode: code }).catch(() => {});
     callback({ ok: true, isOpen: room.isOpen });
     io.to(code).emit('room-access-changed', { isOpen: room.isOpen, changedBy: socket.id });
     broadcastRoomState(room);
@@ -1187,6 +1353,7 @@ io.on('connection', async (socket) => {
     };
 
     addChatMessage(room, message, fileResult.bytes);
+    logActivity({ userId: participant.userId, username: participant.nickname, action: 'chat.message', roomCode: code, details: { hasAttachment: Boolean(fileResult.attachment), attachmentName: fileResult.attachment?.name || '' } }).catch(() => {});
     io.to(code).emit('chat-message', chatMessageView(message));
     callback({ ok: true, messageId: message.id });
   });
@@ -1203,7 +1370,10 @@ io.on('connection', async (socket) => {
 
     participant.inVoice = true;
     participant.micMuted = false;
+    participant.serverMuted = false;
+    participant.cameraOn = false;
     participant.speaking = false;
+    logActivity({ userId: participant.userId, username: participant.nickname, action: 'voice.join', roomCode: code }).catch(() => {});
     callback({ ok: true, peerIds });
     socket.to(code).emit('voice-user-joined', { userId: socket.id });
     broadcastRoomState(room);
@@ -1216,7 +1386,10 @@ io.on('connection', async (socket) => {
     if (room && participant?.inVoice) {
       participant.inVoice = false;
       participant.micMuted = false;
+      participant.serverMuted = false;
+      participant.cameraOn = false;
       participant.speaking = false;
+      logActivity({ userId: participant.userId, username: participant.nickname, action: 'voice.leave', roomCode: code }).catch(() => {});
       socket.to(code).emit('voice-user-left', { userId: socket.id });
       broadcastRoomState(room);
     }
@@ -1228,8 +1401,25 @@ io.on('connection', async (socket) => {
     const room = rooms.get(code);
     const participant = room?.participants.get(socket.id);
     if (!room || !participant?.inVoice) return callback({ ok: false });
-    participant.micMuted = Boolean(muted);
+    if (participant.serverMuted && !Boolean(muted)) {
+      participant.micMuted = true;
+      participant.speaking = false;
+      broadcastRoomState(room);
+      return callback({ ok: false, error: 'Seu microfone foi bloqueado pelo dono da sala.', serverMuted: true });
+    }
+    participant.micMuted = Boolean(muted) || Boolean(participant.serverMuted);
     if (participant.micMuted) participant.speaking = false;
+    broadcastRoomState(room);
+    callback({ ok: true, serverMuted: Boolean(participant.serverMuted) });
+  });
+
+  socket.on('voice-camera-state', ({ on }, callback = () => {}) => {
+    const code = socket.data.roomCode;
+    const room = rooms.get(code);
+    const participant = room?.participants.get(socket.id);
+    if (!room || !participant?.inVoice) return callback({ ok: false });
+    participant.cameraOn = Boolean(on);
+    logActivity({ userId: participant.userId, username: participant.nickname, action: participant.cameraOn ? 'voice.camera_on' : 'voice.camera_off', roomCode: code }).catch(() => {});
     broadcastRoomState(room);
     callback({ ok: true });
   });
@@ -1244,6 +1434,43 @@ io.on('connection', async (socket) => {
       participant.speaking = next;
       broadcastRoomState(room);
     }
+    callback({ ok: true });
+  });
+
+  socket.on('host-mute-participant', ({ target }, callback = () => {}) => {
+    const code = socket.data.roomCode;
+    const room = rooms.get(code);
+    if (!room || room.hostId !== socket.id) return callback({ ok: false, error: 'Somente o dono da sala pode fazer isso.' });
+    if (!target || target === socket.id) return callback({ ok: false, error: 'Participante inválido.' });
+    const person = room.participants.get(target);
+    if (!person?.inVoice) return callback({ ok: false, error: 'Essa pessoa não está na call.' });
+
+    person.serverMuted = !Boolean(person.serverMuted);
+    if (person.serverMuted) {
+      person.micMuted = true;
+      person.speaking = false;
+      io.to(target).emit('voice-force-muted', { by: socket.id });
+    } else {
+      person.micMuted = true;
+      person.speaking = false;
+      io.to(target).emit('voice-server-mute-released', { by: socket.id });
+    }
+    logActivity({ userId: person.userId, username: person.nickname, action: person.serverMuted ? 'voice.server_mute' : 'voice.server_unmute', roomCode: code, details: { by: room.participants.get(socket.id)?.nickname || 'host' } }).catch(() => {});
+    broadcastRoomState(room);
+    callback({ ok: true, serverMuted: person.serverMuted });
+  });
+
+  socket.on('host-kick-participant', ({ target }, callback = () => {}) => {
+    const code = socket.data.roomCode;
+    const room = rooms.get(code);
+    if (!room || room.hostId !== socket.id) return callback({ ok: false, error: 'Somente o dono da sala pode remover pessoas.' });
+    if (!target || target === socket.id) return callback({ ok: false, error: 'Participante inválido.' });
+    const targetSocket = io.sockets.sockets.get(target);
+    if (!targetSocket || targetSocket.data.roomCode !== code) return callback({ ok: false, error: 'Participante não encontrado.' });
+    const person = room.participants.get(target);
+    io.to(target).emit('kicked-from-room', { reason: 'Você foi removido pelo dono da sala.' });
+    logActivity({ userId: person?.userId, username: person?.nickname || 'Participante', action: 'room.kicked', roomCode: code, details: { by: room.participants.get(socket.id)?.nickname || 'host' } }).catch(() => {});
+    removeSocketFromRoom(targetSocket, 'kicked');
     callback({ ok: true });
   });
 
@@ -1293,6 +1520,7 @@ io.on('connection', async (socket) => {
 
     const discordResult = await forwardFeedbackToDiscord(item);
     console.log(`[Feedback] ${item.type} ${item.rating}/5 ${item.nickname || 'Visitante'}: ${item.message.slice(0, 120)}`);
+    logActivity({ userId: participant?.userId || socket.data.account?.id || null, username: item.nickname, action: 'feedback.submit', roomCode: item.roomCode, details: { type: item.type, rating: item.rating } }).catch(() => {});
     callback({ ok: true, sentToDiscord: discordResult.sent });
   });
 
@@ -1309,6 +1537,8 @@ io.on('connection', async (socket) => {
     }
 
     room.sharerIds.add(socket.id);
+    const sharingParticipant = room.participants.get(socket.id);
+    logActivity({ userId: sharingParticipant?.userId, username: sharingParticipant?.nickname, action: 'stream.start', roomCode: code }).catch(() => {});
     const viewerIds = [...room.participants.keys()].filter((id) => id !== socket.id);
     callback({ ok: true, viewerIds, sharerIds: [...room.sharerIds] });
     io.to(code).emit('sharing-started', { sharerId: socket.id });
@@ -1320,7 +1550,9 @@ io.on('connection', async (socket) => {
     const code = socket.data.roomCode;
     const room = rooms.get(code);
     if (room && room.sharerIds.has(socket.id)) {
+      const sharingParticipant = room.participants.get(socket.id);
       room.sharerIds.delete(socket.id);
+      logActivity({ userId: sharingParticipant?.userId, username: sharingParticipant?.nickname, action: 'stream.stop', roomCode: code }).catch(() => {});
       io.to(code).emit('sharing-stopped', { sharerId: socket.id, reason: 'A transmissão foi encerrada.' });
       broadcastRoomState(room);
       broadcastPublicRooms();
@@ -1342,6 +1574,7 @@ io.on('connection', async (socket) => {
 });
 
 initDatabase().finally(() => {
+  logActivity({ action: 'system.start', details: { version: APP_VERSION, database: databaseReady ? 'postgres' : 'memory' } }).catch(() => {});
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`LNZ Transmissão online em http://localhost:${PORT}`);
   });
