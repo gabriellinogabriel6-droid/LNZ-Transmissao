@@ -11,7 +11,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: DISCORD_URL
-        value: https://discord.gg/m67kQeZrns
+        value: https://discord.gg/FEwTjXmmzS
       - key: BRAND_NAME
         value: LNZ Transmissão
       - key: DATABASE_URL

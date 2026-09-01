@@ -2762,20 +2762,30 @@ async function startSharing() {
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: { ideal: 30, max: 60 } },
+
+      // IMPORTANTE:
+      // - Discord continua normal no PC/celular de quem transmite.
+      // - Nunca pedimos o áudio geral do sistema.
+      // - Quando o navegador oferece áudio por janela, pedimos apenas o áudio
+      //   originado na própria janela compartilhada.
+      // - Ao compartilhar uma guia do navegador, o áudio da guia pode ser enviado.
+      // - Ao compartilhar a tela inteira, o áudio geral do PC (incluindo Discord)
+      //   fica excluído.
       audio: state.shareAudio ? {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
         suppressLocalAudioPlayback: false
       } : false,
-      systemAudio: state.shareAudio ? 'include' : 'exclude',
+      systemAudio: 'exclude',
+      windowAudio: state.shareAudio ? 'window' : 'exclude',
       monitorTypeSurfaces: 'include',
       selfBrowserSurface: 'exclude',
       surfaceSwitching: 'include'
     });
 
     if (state.shareAudio && stream.getAudioTracks().length === 0) {
-      showToast('Nenhum áudio foi capturado. Se quiser som, marque a opção de áudio na janela do navegador.');
+      showToast('Nenhum áudio da guia/janela foi capturado. O áudio geral do PC, incluindo Discord, fica bloqueado de propósito.');
     }
 
     const result = await new Promise((resolve) => socket.emit('start-sharing', {}, resolve));
@@ -2891,7 +2901,7 @@ function updateAudioControl() {
   button.disabled = false;
   button.textContent = state.shareAudio ? '🔊 Enviar áudio ON' : '🔇 Enviar áudio OFF';
   button.classList.toggle('audio-on', state.shareAudio);
-  button.title = 'Ative antes de compartilhar.';
+  button.title = 'Envia áudio apenas da guia/janela quando o navegador permitir. Discord e o áudio geral do PC não entram na transmissão.';
 }
 
 $('audioControl').addEventListener('click', () => {
@@ -2907,7 +2917,7 @@ $('audioControl').addEventListener('click', () => {
   state.shareAudio = !state.shareAudio;
   updateAudioControl();
   savePreferencesToAccountSoon();
-  showToast(state.shareAudio ? 'Áudio ativado para a próxima transmissão.' : 'Áudio da transmissão desativado.');
+  showToast(state.shareAudio ? 'Áudio da guia/janela ativado. Discord não será capturado.' : 'Áudio da transmissão desativado.');
 });
 
 $('mixerControl')?.addEventListener('click', () => {
@@ -3340,7 +3350,6 @@ async function initApp() {
   applyIdentityToUI();
   updateVoiceControls();
   applySeasonTheme(state.seasonTheme || 'halloween');
-  initHalloweenLaugh();
   await checkAppVersion();
   await loadAccount();
   try { await loadPublicRooms(); } catch {}
@@ -3396,36 +3405,6 @@ $('channelCall')?.addEventListener('click', () => {
 applySeasonTheme(state.seasonTheme || 'halloween');
 if (!document.body.dataset.view) document.body.dataset.view = 'landing';
 
-// Som de abertura extraído do vídeo enviado pelo usuário.
-// Toca uma única vez por carregamento da página.
-function initHalloweenLaugh() {
-  const audio = $('halloweenLaugh');
-  if (!audio) return;
-
-  let played = false;
-
-  const cleanup = () => {
-    window.removeEventListener('pointerdown', onFirstInteraction, true);
-    window.removeEventListener('keydown', onFirstInteraction, true);
-  };
-
-  const playOnce = async () => {
-    if (played || state.seasonTheme !== 'halloween') return;
-    try {
-      audio.loop = false;
-      audio.volume = 0.55;
-      audio.currentTime = 0;
-      await audio.play();
-      played = true;
-      cleanup();
-    } catch {}
-  };
-
-  const onFirstInteraction = () => { playOnce(); };
-  playOnce();
-  window.addEventListener('pointerdown', onFirstInteraction, true);
-  window.addEventListener('keydown', onFirstInteraction, true);
-}
 
 
 window.addEventListener('unhandledrejection', (event) => {

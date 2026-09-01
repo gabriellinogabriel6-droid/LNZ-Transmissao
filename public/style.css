@@ -3179,3 +3179,37 @@ button:disabled {
 @media (max-width:760px) {
   body[data-view="room"] #roomView { display: block !important; }
 }
+
+
+/* ============================================================
+   LOGO PRINCIPAL LNZ — VISÍVEL NA TELA INICIAL
+   ============================================================ */
+.landing-main-logo {
+  display: block;
+  width: clamp(92px, 8vw, 138px);
+  height: auto;
+  object-fit: contain;
+  margin: -14px 0 18px 0;
+  opacity: .98;
+  filter:
+    drop-shadow(0 0 18px rgba(130, 55, 255, .40))
+    drop-shadow(0 10px 24px rgba(0,0,0,.42));
+  position: relative;
+  z-index: 3;
+}
+
+body[data-view="landing"] .landing-main-logo {
+  display: block !important;
+}
+
+@media (max-width: 620px) {
+  .landing-main-logo {
+    width: 88px;
+    margin: -8px 0 14px 0;
+  }
+}
+
+/* Som de abertura/risada removido: nenhum elemento de áudio decorativo. */
+#halloweenLaugh {
+  display: none !important;
+}

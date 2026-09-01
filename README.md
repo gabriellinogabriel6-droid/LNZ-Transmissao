@@ -45,7 +45,7 @@ http://localhost:3000
 Em **Environment**, configure as variáveis desejadas:
 
 ```env
-DISCORD_URL=https://discord.gg/m67kQeZrns
+DISCORD_URL=https://discord.gg/FEwTjXmmzS
 BRAND_NAME=LNZ Transmissão
 FEEDBACK_WEBHOOK_URL=COLE_SEU_WEBHOOK_AQUI
 ```
@@ -429,3 +429,20 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - Health check rápido em `/healthz`.
 - `render.yaml` usa `/healthz`.
 - O site continua funcional em memória mesmo se o banco externo estiver lento.
+
+
+## Atualização Discord / Logo / Som
+
+- Discord oficial atualizado para: https://discord.gg/FEwTjXmmzS
+- Logo LNZ adicionada de forma visível na tela principal.
+- Som/risada de abertura removido completamente.
+
+
+## Áudio sem Discord
+
+- O Discord continua normal para quem está transmitindo: a pessoa pode ouvir e falar normalmente.
+- A captura de tela usa `systemAudio: exclude`, então o áudio geral do computador não é oferecido para a transmissão.
+- Quando o navegador suporta áudio por janela, o app pede `windowAudio: window`.
+- Ao compartilhar uma guia do navegador, o áudio da própria guia pode ser enviado.
+- Ao compartilhar a tela inteira, o áudio geral do PC (incluindo Discord) fica de fora.
+- O site não silencia o Discord localmente.

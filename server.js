@@ -829,7 +829,7 @@ app.get('/config.js', (_req, res) => {
   res.type('application/javascript').send(
     `window.LNZ_CONFIG = ${JSON.stringify({ 
       iceServers,
-      discordUrl: process.env.DISCORD_URL || 'https://discord.gg/m67kQeZrns',
+      discordUrl: process.env.DISCORD_URL || 'https://discord.gg/FEwTjXmmzS',
       brandName: process.env.BRAND_NAME || 'LNZ Transmissão',
       appVersion: APP_VERSION
     })};`
