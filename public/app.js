@@ -1575,7 +1575,9 @@ async function routeFromLocation() {
 }
 
 
-$('feedbackButton').addEventListener('click', openFeedbackModal);
+const feedbackButton = $('feedbackButton');
+if (feedbackButton) feedbackButton.addEventListener('click', openFeedbackModal);
+$('heroSendFeedback').addEventListener('click', openFeedbackModal);
 $('closeFeedback').addEventListener('click', closeFeedbackModal);
 $('feedbackModal').addEventListener('click', (event) => {
   if (event.target.dataset.closeFeedback) closeFeedbackModal();

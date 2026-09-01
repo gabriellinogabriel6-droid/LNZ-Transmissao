@@ -94,3 +94,9 @@ Importante:
 - Quem assiste controla individualmente o som da transmissão com ON/OFF e volume no painel **Mix**.
 - O volume da **Call de voz** é separado do volume da **Transmissão**.
 - Participantes na call aparecem como **Falando agora**, **Na call • Em silêncio** ou **Na call • Mic OFF**. O avatar ganha destaque enquanto a pessoa fala.
+
+
+## Ajuste do feedback
+
+- O botão **Enviar feedback** foi removido da lateral/rodapé da sala.
+- Agora **Feedbacks** e **Enviar feedback** ficam no **menu principal / tela inicial**.
