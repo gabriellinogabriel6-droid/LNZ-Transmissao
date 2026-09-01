@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#08090d" />
+  <meta name="description" content="LNZ Transmissão - salas públicas e privadas para compartilhar sua tela." />
+  <title>LNZ Transmissão</title>
+  <link rel="icon" href="/assets/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="background-art"></div>
+  <div class="noise"></div>
+
+  <main id="landingView" class="landing-view">
+    <section class="landing-shell">
+      <div class="hero-copy">
+        <div class="mini-brand"><span></span>LNZ TRANSMISSÃO <b>ponto a ponto</b></div>
+        <h1>Sua tela, ao vivo,<br><em>direto para a sala.</em></h1>
+        <p>Crie uma sala em um clique, compartilhe o código e transmita a tela pelo navegador. Sem instalar nada.</p>
+
+        <div class="benefits">
+          <div><i>⚡</i><span>Sala instantânea, por código ou link</span></div>
+          <div><i>◈</i><span>Escolha entre sala pública ou privada</span></div>
+          <div><i>⌁</i><span>Compartilhamento WebRTC com baixa latência</span></div>
+        </div>
+      </div>
+
+      <div class="entry-card glass-card">
+        <h2>Entrar</h2>
+        <p>Escolha um nickname para ser identificado na sala.</p>
+
+        <div class="profile-row">
+          <button id="landingAvatarButton" class="avatar-button" type="button" title="Escolher avatar">
+            <img id="landingAvatarImage" class="hidden" alt="Avatar" />
+            <span id="landingAvatarInitials">LZ</span>
+          </button>
+          <div class="field grow">
+            <div class="label-line"><label for="landingNickname">NICKNAME</label><small id="landingNickCount">0/24</small></div>
+            <input id="landingNickname" maxlength="24" autocomplete="nickname" placeholder="Como você quer ser chamado?" />
+          </div>
+        </div>
+
+        <input id="avatarInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+        <div class="avatar-actions">
+          <button id="adjustAvatarLanding" class="btn btn-outline small-btn" type="button">✦ Ajustar foto</button>
+          <button id="removeAvatarLanding" class="btn btn-outline small-btn" type="button">Remover foto</button>
+        </div>
+        <button id="openCreateRoom" class="btn btn-primary btn-wide">＋ Criar sala</button>
+
+        <div class="divider"><span>OU</span></div>
+
+        <label class="field-label" for="roomCodeInput">CÓDIGO DA SALA</label>
+        <div class="join-code-row">
+          <input id="roomCodeInput" maxlength="9" autocomplete="off" placeholder="XXXX-XXXX" />
+          <button id="goToRoom" class="btn btn-soft">Entrar →</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="public-section">
+      <div class="section-heading">
+        <div>
+          <span>SALAS PÚBLICAS</span>
+          <h3>Entre em uma sala aberta</h3>
+        </div>
+        <button id="refreshRooms" class="icon-btn" title="Atualizar">↻</button>
+      </div>
+      <div id="publicRooms" class="public-grid"></div>
+      <div id="publicEmpty" class="empty-public">Nenhuma sala pública aberta agora.</div>
+    </section>
+
+    <footer>© <span id="year"></span> Linozera • LNZ Transmissão</footer>
+  </main>
+
+  <main id="prejoinView" class="prejoin-view hidden">
+    <div class="prejoin-card glass-card">
+      <a class="prejoin-brand" href="/">
+        <img src="/assets/logo.png" alt="LNZ" />
+        <strong>LNZ TRANSMISSÃO</strong>
+      </a>
+      <h2>Antes de entrar</h2>
+      <p>Escolha como você vai aparecer para os outros participantes.</p>
+
+      <div class="room-pill-row">Sala <span id="prejoinRoomCode" class="code-pill">----</span> <span id="prejoinPrivacy" class="privacy-pill"></span></div>
+
+      <button id="prejoinAvatarButton" class="avatar-button avatar-large" type="button">
+        <img id="prejoinAvatarImage" class="hidden" alt="Avatar" />
+        <span id="prejoinAvatarInitials">?</span>
+      </button>
+      <div id="prejoinAvatarName" class="avatar-name">Sem nickname</div>
+      <div class="avatar-actions center-actions">
+        <button id="chooseAvatarPrejoin" class="btn btn-outline small-btn">✎ Escolher avatar</button>
+        <button id="adjustAvatarPrejoin" class="btn btn-outline small-btn" type="button">✦ Ajustar foto</button>
+      </div>
+
+      <div class="field prejoin-field">
+        <div class="label-line"><label for="prejoinNickname">NICKNAME</label><small id="prejoinNickCount">0/24</small></div>
+        <input id="prejoinNickname" maxlength="24" autocomplete="nickname" placeholder="Como você quer ser chamado?" />
+        <small class="helper">Esse nome fica visível para todos na sala.</small>
+      </div>
+
+      <div id="passwordField" class="field prejoin-field hidden">
+        <label for="roomPassword">SENHA DA SALA</label>
+        <input id="roomPassword" type="password" maxlength="64" autocomplete="current-password" placeholder="Digite a senha da sala privada" />
+      </div>
+
+      <button id="enterRoom" class="btn btn-primary btn-wide">Entrar na sala →</button>
+      <div class="prejoin-bottom"><button id="backHome" class="btn btn-outline small-btn">← Voltar ao início</button></div>
+    </div>
+  </main>
+
+  <main id="roomView" class="room-view hidden">
+    <header class="room-topbar">
+      <div class="room-brand">
+        <img src="/assets/logo.png" alt="LNZ" />
+        <strong>LNZ</strong>
+        <span class="top-separator"></span>
+        <button id="topRoomCode" class="code-pill code-button" title="Copiar código">----</button>
+      </div>
+      <div class="room-status">
+        <span id="topPeople" class="people-chip">♙ 0</span>
+        <span class="connected"><i></i> Conectado</span>
+      </div>
+    </header>
+
+    <aside class="room-sidebar">
+      <div class="invite-card">
+        <span>CÓDIGO DA SALA</span>
+        <div class="invite-code-line"><strong id="sidebarRoomCode">----</strong><button id="copyCode" title="Copiar código">⧉</button></div>
+        <div id="sidebarPrivacy" class="privacy-line"></div>
+        <button id="copyInvite" class="btn btn-outline btn-wide">🔗 Copiar link do convite</button>
+      </div>
+
+      <div class="participants-heading">NA SALA — <span id="participantCount">0</span></div>
+      <div id="participantsList" class="participants-list"></div>
+
+      <div class="sidebar-me">
+        <div id="meMiniAvatar" class="mini-avatar">?</div>
+        <span>Você entrou como <b id="meName">—</b></span>
+      </div>
+    </aside>
+
+    <section class="room-stage">
+      <div id="emptyStage" class="empty-stage">
+        <div class="screen-icon">▣</div>
+        <h2>Ninguém está compartilhando ainda</h2>
+        <p>Assim que alguém iniciar, a transmissão aparece aqui em destaque.</p>
+        <div class="stage-actions">
+          <button id="shareFromEmpty" class="btn btn-primary">▣ Compartilhar tela</button>
+          <button id="copyInviteCenter" class="btn btn-outline">🔗 Copiar link</button>
+        </div>
+      </div>
+
+      <div id="videoStage" class="video-stage hidden">
+        <div class="video-topline">
+          <span id="sharingLabel">Transmitindo agora</span>
+          <span class="live-badge">AO VIVO</span>
+        </div>
+        <video id="stageVideo" autoplay playsinline></video>
+        <div id="videoConnecting" class="video-connecting hidden"><div class="spinner"></div><span>Conectando transmissão...</span></div>
+      </div>
+
+      <div class="room-controls">
+        <button id="shareControl" class="btn btn-primary control-main">▣ Compartilhar tela</button>
+        <span></span>
+        <button id="fullscreenControl" class="control-icon" title="Tela cheia">⛶</button>
+        <span></span>
+        <button id="leaveControl" class="control-icon leave-icon" title="Sair da sala">↪</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="createModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal="true"></div>
+    <div class="modal-card glass-card">
+      <div class="modal-head">
+        <div><span>CRIAR SALA</span><h2>Quem pode entrar?</h2></div>
+        <button id="closeCreateModal" class="modal-close">×</button>
+      </div>
+
+      <div class="visibility-grid">
+        <button class="visibility-option active" data-visibility="public">
+          <div class="visibility-icon">◎</div>
+          <strong>Pública</strong>
+          <span>Aparece na lista de salas e qualquer pessoa pode entrar.</span>
+        </button>
+        <button class="visibility-option" data-visibility="private">
+          <div class="visibility-icon">⌁</div>
+          <strong>Privada</strong>
+          <span>Não aparece na lista. Entrada somente com código e senha.</span>
+        </button>
+      </div>
+
+      <div id="createPasswordWrap" class="field hidden">
+        <label for="createPassword">SENHA DA SALA</label>
+        <input id="createPassword" type="password" maxlength="64" placeholder="Mínimo 4 caracteres" />
+      </div>
+
+      <button id="createRoomConfirm" class="btn btn-primary btn-wide">Criar sala pública</button>
+    </div>
+  </div>
+
+  <div id="avatarEditorModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close-avatar-editor="true"></div>
+    <div class="modal-card glass-card avatar-editor-card">
+      <div class="modal-head">
+        <div><span>AJUSTAR FOTO</span><h2>Regular tamanho da foto</h2></div>
+        <button id="closeAvatarEditor" class="modal-close">×</button>
+      </div>
+
+      <div class="avatar-editor-preview-wrap">
+        <div class="avatar-editor-preview" id="avatarEditorPreview">
+          <img id="avatarEditorImage" alt="Preview do avatar" />
+          <span id="avatarEditorInitials">LZ</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label-line"><label for="avatarZoom">TAMANHO DA FOTO</label><small id="avatarZoomValue">100%</small></div>
+        <input id="avatarZoom" type="range" min="0.6" max="1.8" step="0.05" value="1" />
+        <small class="helper">Arraste para aproximar ou recuar a foto dentro do círculo.</small>
+      </div>
+
+      <div class="avatar-editor-buttons">
+        <button id="changeAvatarFromEditor" class="btn btn-outline" type="button">Trocar foto</button>
+        <button id="resetAvatarZoom" class="btn btn-outline" type="button">Resetar</button>
+        <button id="saveAvatarEditor" class="btn btn-primary" type="button">Salvar ajuste</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/config.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
