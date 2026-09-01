@@ -254,7 +254,7 @@
     <div class="modal-backdrop" data-close-avatar-editor="true"></div>
     <div class="modal-card glass-card avatar-editor-card">
       <div class="modal-head">
-        <div><span>AJUSTAR FOTO</span><h2>Regular tamanho da foto</h2></div>
+        <div><span>AJUSTAR FOTO</span><h2>Tamanho e posição da foto</h2></div>
         <button id="closeAvatarEditor" class="modal-close">×</button>
       </div>
 
@@ -272,14 +272,21 @@
       </div>
 
       <div class="field avatar-position-field">
+        <div class="label-line"><label for="avatarPositionX">POSIÇÃO HORIZONTAL</label><small id="avatarPositionXValue">Centro</small></div>
+        <input id="avatarPositionX" type="range" min="-60" max="60" step="1" value="0" />
+      </div>
+
+      <div class="field avatar-position-field">
         <div class="label-line"><label for="avatarPositionY">POSIÇÃO VERTICAL</label><small id="avatarPositionYValue">Centro</small></div>
         <input id="avatarPositionY" type="range" min="-60" max="60" step="1" value="0" />
-        <div class="avatar-position-buttons">
-          <button id="avatarMoveUp" class="btn btn-outline small-btn" type="button">↑ Subir</button>
-          <button id="avatarCenterY" class="btn btn-outline small-btn" type="button">Centralizar</button>
-          <button id="avatarMoveDown" class="btn btn-outline small-btn" type="button">↓ Descer</button>
+        <div class="avatar-direction-pad">
+          <span></span><button id="avatarMoveUp" class="btn btn-outline small-btn" type="button">↑</button><span></span>
+          <button id="avatarMoveLeft" class="btn btn-outline small-btn" type="button">←</button>
+          <button id="avatarCenterPosition" class="btn btn-outline small-btn avatar-center-btn" type="button">Centralizar</button>
+          <button id="avatarMoveRight" class="btn btn-outline small-btn" type="button">→</button>
+          <span></span><button id="avatarMoveDown" class="btn btn-outline small-btn" type="button">↓</button><span></span>
         </div>
-        <small class="helper">Você também pode arrastar a foto diretamente no círculo para cima ou para baixo.</small>
+        <small class="helper">Arraste a foto no círculo para mover livremente para qualquer lado.</small>
       </div>
 
       <div class="avatar-editor-buttons">

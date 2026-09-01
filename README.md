@@ -133,3 +133,8 @@ O editor de avatar agora permite:
 - salvar a posição para que o mesmo enquadramento apareça na sala e no chat.
 
 Esta versão também mantém o modo anti-retorno com a transmissão de tela sem áudio.
+
+
+## Ajuste completo da foto
+
+O editor do avatar permite zoom e movimento para cima, baixo, esquerda e direita. Também é possível arrastar a foto livremente dentro do círculo com o mouse ou toque.

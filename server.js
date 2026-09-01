@@ -85,6 +85,12 @@ function cleanAvatarScale(value) {
   return Math.min(3, Math.max(0.5, scale));
 }
 
+function cleanAvatarOffsetX(value) {
+  const offset = Number(value);
+  if (!Number.isFinite(offset)) return 0;
+  return Math.min(60, Math.max(-60, offset));
+}
+
 function cleanAvatarOffsetY(value) {
   const offset = Number(value);
   if (!Number.isFinite(offset)) return 0;
@@ -194,6 +200,7 @@ function participantView(id, participant, room) {
     nickname: participant.nickname,
     avatar: participant.avatar || '',
     avatarScale: cleanAvatarScale(participant.avatarScale),
+    avatarOffsetX: cleanAvatarOffsetX(participant.avatarOffsetX),
     avatarOffsetY: cleanAvatarOffsetY(participant.avatarOffsetY),
     isHost: room.hostId === id,
     isSharer: room.sharerId === id
@@ -274,7 +281,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('create-room', ({ nickname, avatar, avatarScale, avatarOffsetY, visibility, password }, callback = () => {}) => {
+  socket.on('create-room', ({ nickname, avatar, avatarScale, avatarOffsetX, avatarOffsetY, visibility, password }, callback = () => {}) => {
     const cleanName = cleanNickname(nickname);
     const mode = visibility === 'private' ? 'private' : 'public';
     const pass = String(password || '');
@@ -303,6 +310,7 @@ io.on('connection', (socket) => {
       nickname: cleanName,
       avatar: cleanAvatar(avatar),
       avatarScale: cleanAvatarScale(avatarScale),
+      avatarOffsetX: cleanAvatarOffsetX(avatarOffsetX),
       avatarOffsetY: cleanAvatarOffsetY(avatarOffsetY)
     });
 
@@ -322,7 +330,7 @@ io.on('connection', (socket) => {
     broadcastPublicRooms();
   });
 
-  socket.on('join-room', ({ roomCode, nickname, avatar, avatarScale, avatarOffsetY, password }, callback = () => {}) => {
+  socket.on('join-room', ({ roomCode, nickname, avatar, avatarScale, avatarOffsetX, avatarOffsetY, password }, callback = () => {}) => {
     const code = normalizeCode(compactCode(roomCode));
     const cleanName = cleanNickname(nickname);
     const room = rooms.get(code);
@@ -339,6 +347,7 @@ io.on('connection', (socket) => {
       nickname: cleanName,
       avatar: cleanAvatar(avatar),
       avatarScale: cleanAvatarScale(avatarScale),
+      avatarOffsetX: cleanAvatarOffsetX(avatarOffsetX),
       avatarOffsetY: cleanAvatarOffsetY(avatarOffsetY)
     });
     socket.join(code);
@@ -388,6 +397,7 @@ io.on('connection', (socket) => {
       nickname: participant.nickname,
       avatar: participant.avatar || '',
       avatarScale: cleanAvatarScale(participant.avatarScale),
+      avatarOffsetX: cleanAvatarOffsetX(participant.avatarOffsetX),
       avatarOffsetY: cleanAvatarOffsetY(participant.avatarOffsetY),
       text: cleanText,
       attachment: fileResult.attachment,

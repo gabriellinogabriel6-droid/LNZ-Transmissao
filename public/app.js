@@ -10,6 +10,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   avatar: localStorage.getItem('lnz_avatar') || '',
   avatarScale: Math.min(3, Math.max(0.5, Number(localStorage.getItem('lnz_avatar_scale') || 1.35))),
+  avatarOffsetX: Math.min(60, Math.max(-60, Number(localStorage.getItem('lnz_avatar_offset_x') || 0))),
   avatarOffsetY: Math.min(60, Math.max(-60, Number(localStorage.getItem('lnz_avatar_offset_y') || 0))),
   nickname: localStorage.getItem('lnz_nickname') || '',
   room: null,
@@ -81,6 +82,7 @@ function saveIdentity(nickname) {
   localStorage.setItem('lnz_nickname', nickname);
   if (state.avatar) localStorage.setItem('lnz_avatar', state.avatar);
   localStorage.setItem('lnz_avatar_scale', String(state.avatarScale || 1));
+  localStorage.setItem('lnz_avatar_offset_x', String(state.avatarOffsetX || 0));
   localStorage.setItem('lnz_avatar_offset_y', String(state.avatarOffsetY || 0));
 }
 
@@ -88,6 +90,7 @@ function persistAvatarState() {
   if (state.avatar) localStorage.setItem('lnz_avatar', state.avatar);
   else localStorage.removeItem('lnz_avatar');
   localStorage.setItem('lnz_avatar_scale', String(state.avatarScale || 1));
+  localStorage.setItem('lnz_avatar_offset_x', String(state.avatarOffsetX || 0));
   localStorage.setItem('lnz_avatar_offset_y', String(state.avatarOffsetY || 0));
 }
 
@@ -110,9 +113,10 @@ function updateNicknamePreview() {
   if (editorInitials) editorInitials.textContent = initials(landingName || prejoinName || state.nickname || 'LZ');
 }
 
-function applyAvatarTransform(img, scale = state.avatarScale, offsetY = state.avatarOffsetY) {
+function applyAvatarTransform(img, scale = state.avatarScale, offsetX = state.avatarOffsetX, offsetY = state.avatarOffsetY) {
   if (!img) return;
   img.style.setProperty('--avatar-scale', String(scale || 1));
+  img.style.setProperty('--avatar-x', String(Number(offsetX) || 0));
   img.style.setProperty('--avatar-y', String(Number(offsetY) || 0));
 }
 
@@ -128,6 +132,7 @@ function updateAvatarUI() {
       img.removeAttribute('src');
       img.classList.add('hidden');
       img.style.removeProperty('--avatar-scale');
+      img.style.removeProperty('--avatar-x');
       img.style.removeProperty('--avatar-y');
     }
   }
@@ -147,6 +152,7 @@ $('avatarInput').addEventListener('change', (event) => {
   reader.onload = () => {
     state.avatar = String(reader.result || '');
     state.avatarScale = 1.35;
+    state.avatarOffsetX = 0;
     state.avatarOffsetY = 0;
     persistAvatarState();
     updateAvatarUI();
@@ -162,6 +168,7 @@ $('adjustAvatarPrejoin').addEventListener('click', openAvatarEditor);
 $('removeAvatarLanding').addEventListener('click', () => {
   state.avatar = '';
   state.avatarScale = 1.35;
+  state.avatarOffsetX = 0;
   state.avatarOffsetY = 0;
   persistAvatarState();
   updateAvatarUI();
@@ -171,18 +178,21 @@ $('removeAvatarLanding').addEventListener('click', () => {
 function updateAvatarEditorPreview() {
   const img = $('avatarEditorImage');
   const scale = Number($('avatarZoom').value || state.avatarScale || 1);
+  const offsetX = Number($('avatarPositionX').value || 0);
   const offsetY = Number($('avatarPositionY').value || 0);
   $('avatarZoomValue').textContent = `${Math.round(scale * 100)}%`;
+  $('avatarPositionXValue').textContent = offsetX === 0 ? 'Centro' : (offsetX < 0 ? `${Math.abs(offsetX)}% para esquerda` : `${offsetX}% para direita`);
   $('avatarPositionYValue').textContent = offsetY === 0 ? 'Centro' : (offsetY < 0 ? `${Math.abs(offsetY)}% para cima` : `${offsetY}% para baixo`);
   $('avatarEditorInitials').textContent = initials($('landingNickname').value.trim() || $('prejoinNickname').value.trim() || state.nickname || 'LZ');
   if (state.avatar) {
     img.src = state.avatar;
     img.classList.remove('hidden');
-    applyAvatarTransform(img, scale, offsetY);
+    applyAvatarTransform(img, scale, offsetX, offsetY);
   } else {
     img.removeAttribute('src');
     img.classList.add('hidden');
     img.style.removeProperty('--avatar-scale');
+    img.style.removeProperty('--avatar-x');
     img.style.removeProperty('--avatar-y');
   }
 }
@@ -190,6 +200,7 @@ function updateAvatarEditorPreview() {
 function openAvatarEditor() {
   if (!state.avatar) return showToast('Escolha uma foto primeiro.');
   $('avatarZoom').value = String(state.avatarScale || 1);
+  $('avatarPositionX').value = String(state.avatarOffsetX || 0);
   $('avatarPositionY').value = String(state.avatarOffsetY || 0);
   updateAvatarEditorPreview();
   $('avatarEditorModal').classList.remove('hidden');
@@ -209,45 +220,59 @@ $('avatarZoom').min = '0.5';
 $('avatarZoom').max = '3';
 $('avatarZoom').step = '0.05';
 $('avatarZoom').addEventListener('input', updateAvatarEditorPreview);
+$('avatarPositionX').addEventListener('input', updateAvatarEditorPreview);
 $('avatarPositionY').addEventListener('input', updateAvatarEditorPreview);
 
-function clampAvatarY(value) {
+function clampAvatarAxis(value) {
   return Math.min(60, Math.max(-60, Number(value) || 0));
 }
 
-function nudgeAvatarY(delta) {
-  $('avatarPositionY').value = String(clampAvatarY(Number($('avatarPositionY').value || 0) + delta));
+function nudgeAvatarX(delta) {
+  $('avatarPositionX').value = String(clampAvatarAxis(Number($('avatarPositionX').value || 0) + delta));
   updateAvatarEditorPreview();
 }
 
+function nudgeAvatarY(delta) {
+  $('avatarPositionY').value = String(clampAvatarAxis(Number($('avatarPositionY').value || 0) + delta));
+  updateAvatarEditorPreview();
+}
+
+$('avatarMoveLeft').addEventListener('click', () => nudgeAvatarX(-8));
+$('avatarMoveRight').addEventListener('click', () => nudgeAvatarX(8));
 $('avatarMoveUp').addEventListener('click', () => nudgeAvatarY(-8));
 $('avatarMoveDown').addEventListener('click', () => nudgeAvatarY(8));
-$('avatarCenterY').addEventListener('click', () => {
+$('avatarCenterPosition').addEventListener('click', () => {
+  $('avatarPositionX').value = '0';
   $('avatarPositionY').value = '0';
   updateAvatarEditorPreview();
 });
 
-// Arrastar a imagem no preview para cima/baixo também ajusta a posição vertical.
+// Arraste a imagem livremente dentro do círculo: esquerda/direita/cima/baixo.
 (() => {
   const preview = $('avatarEditorPreview');
   let dragging = false;
+  let startClientX = 0;
   let startClientY = 0;
-  let startOffset = 0;
+  let startOffsetX = 0;
+  let startOffsetY = 0;
 
   preview.addEventListener('pointerdown', (event) => {
     if (!state.avatar) return;
     dragging = true;
+    startClientX = event.clientX;
     startClientY = event.clientY;
-    startOffset = Number($('avatarPositionY').value || 0);
+    startOffsetX = Number($('avatarPositionX').value || 0);
+    startOffsetY = Number($('avatarPositionY').value || 0);
     preview.setPointerCapture?.(event.pointerId);
     preview.classList.add('dragging');
   });
 
   preview.addEventListener('pointermove', (event) => {
     if (!dragging) return;
-    const deltaPx = event.clientY - startClientY;
-    const deltaPercent = (deltaPx / Math.max(1, preview.clientHeight)) * 100;
-    $('avatarPositionY').value = String(clampAvatarY(startOffset + deltaPercent));
+    const deltaX = ((event.clientX - startClientX) / Math.max(1, preview.clientWidth)) * 100;
+    const deltaY = ((event.clientY - startClientY) / Math.max(1, preview.clientHeight)) * 100;
+    $('avatarPositionX').value = String(clampAvatarAxis(startOffsetX + deltaX));
+    $('avatarPositionY').value = String(clampAvatarAxis(startOffsetY + deltaY));
     updateAvatarEditorPreview();
   });
 
@@ -261,12 +286,14 @@ $('avatarCenterY').addEventListener('click', () => {
 $('changeAvatarFromEditor').addEventListener('click', pickAvatar);
 $('resetAvatarZoom').addEventListener('click', () => {
   $('avatarZoom').value = '1.35';
+  $('avatarPositionX').value = '0';
   $('avatarPositionY').value = '0';
   updateAvatarEditorPreview();
 });
 $('saveAvatarEditor').addEventListener('click', () => {
   state.avatarScale = Math.min(3, Math.max(0.5, Number($('avatarZoom').value || 1)));
-  state.avatarOffsetY = clampAvatarY($('avatarPositionY').value);
+  state.avatarOffsetX = clampAvatarAxis($('avatarPositionX').value);
+  state.avatarOffsetY = clampAvatarAxis($('avatarPositionY').value);
   persistAvatarState();
   updateAvatarUI();
   closeAvatarEditor();
@@ -335,6 +362,7 @@ $('createRoomConfirm').addEventListener('click', async () => {
     nickname,
     avatar: state.avatar,
     avatarScale: state.avatarScale,
+    avatarOffsetX: state.avatarOffsetX,
     avatarOffsetY: state.avatarOffsetY,
     visibility: state.selectedVisibility,
     password
@@ -396,6 +424,7 @@ $('enterRoom').addEventListener('click', async () => {
     nickname,
     avatar: state.avatar,
     avatarScale: state.avatarScale,
+    avatarOffsetX: state.avatarOffsetX,
     avatarOffsetY: state.avatarOffsetY,
     password: $('roomPassword').value
   }, resolve));
@@ -441,7 +470,7 @@ function renderRoom() {
   $('meName').textContent = me?.nickname || state.nickname || 'Você';
   const meMini = $('meMiniAvatar');
   if (me?.avatar) {
-    meMini.innerHTML = `<img src="${me.avatar}" alt="" style="--avatar-scale:${me.avatarScale || 1};--avatar-y:${me.avatarOffsetY || 0}">`;
+    meMini.innerHTML = `<img src="${me.avatar}" alt="" style="--avatar-scale:${me.avatarScale || 1};--avatar-x:${me.avatarOffsetX || 0};--avatar-y:${me.avatarOffsetY || 0}">`;
   } else {
     meMini.textContent = initials(me?.nickname || state.nickname);
   }
@@ -458,6 +487,7 @@ function renderRoom() {
       img.src = person.avatar;
       img.alt = '';
       img.style.setProperty('--avatar-scale', String(person.avatarScale || 1));
+      img.style.setProperty('--avatar-x', String(person.avatarOffsetX || 0));
       img.style.setProperty('--avatar-y', String(person.avatarOffsetY || 0));
       avatar.appendChild(img);
     } else {
@@ -585,6 +615,7 @@ function renderChatMessage(message, shouldScroll = true) {
     img.src = message.avatar;
     img.alt = '';
     img.style.setProperty('--avatar-scale', String(message.avatarScale || 1));
+    img.style.setProperty('--avatar-x', String(message.avatarOffsetX || 0));
     img.style.setProperty('--avatar-y', String(message.avatarOffsetY || 0));
     avatar.appendChild(img);
   } else {
