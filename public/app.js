@@ -127,9 +127,20 @@ function updateAccountUI() {
     if (Number.isFinite(Number(state.account.avatarOffsetX))) state.avatarOffsetX = Number(state.account.avatarOffsetX);
     if (Number.isFinite(Number(state.account.avatarOffsetY))) state.avatarOffsetY = Number(state.account.avatarOffsetY);
     state.themeColor = state.account.themeColor || state.themeColor || '#7a3cff';
+    const savedPrefs = state.account.preferences || {};
+    if (Number.isFinite(Number(savedPrefs.transmissionVolume))) state.transmissionVolume = Math.min(1, Math.max(0, Number(savedPrefs.transmissionVolume)));
+    if (Number.isFinite(Number(savedPrefs.voiceVolume))) state.voiceVolume = Math.min(1, Math.max(0, Number(savedPrefs.voiceVolume)));
+    if (typeof savedPrefs.voiceOutputMuted === 'boolean') state.voiceOutputMuted = savedPrefs.voiceOutputMuted;
+    if (typeof savedPrefs.transmissionMuted === 'boolean') state.remoteAudioMuted = savedPrefs.transmissionMuted;
+    if (typeof savedPrefs.shareAudio === 'boolean') state.shareAudio = savedPrefs.shareAudio;
     localStorage.setItem('lnz_theme_color', state.themeColor);
+    localStorage.setItem('lnz_transmission_volume', String(state.transmissionVolume));
+    localStorage.setItem('lnz_voice_volume', String(state.voiceVolume));
+    localStorage.setItem('lnz_voice_output_muted', state.voiceOutputMuted ? '1' : '0');
     persistAvatarState();
     applyThemeColor(state.themeColor);
+    updateMixerUI?.();
+    updateAudioControl?.();
 
     if ($('landingNickname')) {
       $('landingNickname').value = username;
@@ -366,6 +377,32 @@ async function apiJson(url, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível concluir a ação.');
   return data;
+}
+
+function currentSavedPreferences() {
+  return {
+    transmissionVolume: state.transmissionVolume,
+    voiceVolume: state.voiceVolume,
+    voiceOutputMuted: state.voiceOutputMuted,
+    transmissionMuted: state.remoteAudioMuted,
+    shareAudio: state.shareAudio
+  };
+}
+
+function savePreferencesToAccountSoon() {
+  if (!state.account) return;
+  clearTimeout(savePreferencesToAccountSoon.timer);
+  savePreferencesToAccountSoon.timer = setTimeout(async () => {
+    try {
+      const data = await apiJson('/api/preferences/update', {
+        method: 'POST',
+        body: JSON.stringify({ preferences: currentSavedPreferences() })
+      });
+      state.account = { ...state.account, preferences: data.preferences };
+    } catch {
+      // Mantém a preferência local e tenta de novo na próxima alteração.
+    }
+  }, 450);
 }
 
 function setAvatarInContainer(container, profile, fallback = '?') {
@@ -928,7 +965,7 @@ $('avatarInput').addEventListener('change', (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) return showToast('Escolha uma imagem válida.');
-  if (file.size > 1400 * 1024) return showToast('Use uma imagem ou GIF menor que 1,4 MB.');
+  if (file.size > 2 * 1024 * 1024) return showToast('Use uma imagem ou GIF menor que 2 MB.');
 
   const reader = new FileReader();
   reader.onload = () => {
@@ -2406,6 +2443,7 @@ function setTransmissionVolume(value) {
   syncTransmissionAudio();
   updateMixerUI();
   updateAudioControl();
+  savePreferencesToAccountSoon();
 }
 
 function setVoiceVolume(value) {
@@ -2415,6 +2453,7 @@ function setVoiceVolume(value) {
   localStorage.setItem('lnz_voice_output_muted', state.voiceOutputMuted ? '1' : '0');
   syncVoiceOutputVolume();
   updateMixerUI();
+  savePreferencesToAccountSoon();
 }
 
 async function flushScreenIce(map, key, pc) {
@@ -2610,11 +2649,13 @@ $('audioControl').addEventListener('click', () => {
     syncTransmissionAudio();
     updateAudioControl();
     updateMixerUI();
+    savePreferencesToAccountSoon();
     return;
   }
   if (state.isSharing) return;
   state.shareAudio = !state.shareAudio;
   updateAudioControl();
+  savePreferencesToAccountSoon();
   showToast(state.shareAudio ? 'Áudio ativado para a próxima transmissão.' : 'Áudio da transmissão desativado.');
 });
 
@@ -2629,12 +2670,14 @@ $('mixerToggleTransmission')?.addEventListener('click', () => {
   syncTransmissionAudio();
   updateAudioControl();
   updateMixerUI();
+  savePreferencesToAccountSoon();
 });
 $('mixerToggleVoice')?.addEventListener('click', () => {
   state.voiceOutputMuted = !state.voiceOutputMuted;
   localStorage.setItem('lnz_voice_output_muted', state.voiceOutputMuted ? '1' : '0');
   syncVoiceOutputVolume();
   updateMixerUI();
+  savePreferencesToAccountSoon();
 });
 
 $('shareFromEmpty').addEventListener('click', startSharing);

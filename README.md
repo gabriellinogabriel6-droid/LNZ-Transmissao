@@ -233,3 +233,24 @@ Esta versão reforça a persistência das contas e adiciona **Manter conectado**
 ### Render
 
 Em **Environment**, configure `DATABASE_URL` com a URL do PostgreSQL. Depois salve e faça um novo deploy.
+
+
+## Tudo salvo na conta
+
+Com `DATABASE_URL` configurado no Render, esta versão mantém no PostgreSQL:
+
+- login e senha protegida por hash;
+- código de recuperação protegido;
+- foto ou GIF do perfil (até 2 MB);
+- zoom e posição X/Y da foto;
+- bio e status;
+- cor personalizada do site;
+- amigos e pedidos de amizade;
+- volume geral das transmissões;
+- volume geral da call;
+- preferência de mute da call/transmissão;
+- preferência de enviar áudio ao compartilhar tela.
+
+O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do login o **banco de dados é a fonte principal do perfil**. Assim o perfil volta em outro PC e depois de reinícios/deploys do Render.
+
+> Importante: sem `DATABASE_URL`, o site bloqueia criação/login persistente para evitar contas que desapareçam após reiniciar o servidor.

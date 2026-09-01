@@ -55,3 +55,8 @@ PAINEL ADMIN PRIVADO
 - Somente essa conta, autenticada no site, consegue abrir /api/admin/dashboard e o Painel Admin.
 - O painel mostra contas cadastradas, usuários online, sessões, salas ativas, transmissões, feedbacks e registros de atividade.
 - Senhas, códigos de recuperação e conteúdo das mensagens do chat NÃO aparecem nos logs.
+
+
+TUDO SALVO NA CONTA
+-------------------
+Confira no Render > Environment se DATABASE_URL está configurado com o PostgreSQL. Sem isso, contas/perfis persistentes não funcionarão.

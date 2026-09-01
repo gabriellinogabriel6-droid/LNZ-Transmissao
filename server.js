@@ -16,7 +16,7 @@ const io = new Server(server, {
 const PORT = Number(process.env.PORT) || 3000;
 const rooms = new Map();
 
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '5mb' }));
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const dbPool = DATABASE_URL ? new Pool({
@@ -196,6 +196,7 @@ async function initDatabase() {
         bio VARCHAR(160) NOT NULL DEFAULT '',
         status_text VARCHAR(60) NOT NULL DEFAULT '',
         theme_color VARCHAR(7) NOT NULL DEFAULT '#7a3cff',
+        preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         last_login_at TIMESTAMPTZ
       );
@@ -208,6 +209,7 @@ async function initDatabase() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS bio VARCHAR(160) NOT NULL DEFAULT '';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS status_text VARCHAR(60) NOT NULL DEFAULT '';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_color VARCHAR(7) NOT NULL DEFAULT '#7a3cff';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
       CREATE TABLE IF NOT EXISTS friendships (
         user_a UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         user_b UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -292,13 +294,14 @@ function profileFromRow(row) {
     bio: row.bio || '',
     status: row.status_text ?? row.status ?? '',
     themeColor: cleanThemeColor(row.theme_color ?? row.themeColor ?? '#7a3cff'),
+    preferences: (row.preferences && typeof row.preferences === 'object') ? row.preferences : {},
     createdAt: row.created_at ? new Date(row.created_at).getTime() : (row.createdAt || Date.now())
   };
 }
 
 async function getUserProfileById(id) {
   if (databaseReady) {
-    const { rows } = await dbPool.query('SELECT id,username,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,created_at FROM users WHERE id=$1 LIMIT 1', [id]);
+    const { rows } = await dbPool.query('SELECT id,username,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,preferences,created_at FROM users WHERE id=$1 LIMIT 1', [id]);
     return profileFromRow(rows[0]);
   }
   for (const row of memoryUsers.values()) if (row.id === id) return profileFromRow(row);
@@ -309,7 +312,7 @@ async function getUserProfileByUsername(username) {
   const key = String(username || '').trim().toLowerCase();
   if (!key) return null;
   if (databaseReady) {
-    const { rows } = await dbPool.query('SELECT id,username,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,created_at FROM users WHERE username_key=$1 LIMIT 1', [key]);
+    const { rows } = await dbPool.query('SELECT id,username,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,preferences,created_at FROM users WHERE username_key=$1 LIMIT 1', [key]);
     return profileFromRow(rows[0]);
   }
   return profileFromRow(memoryUsers.get(key));
@@ -367,7 +370,7 @@ async function createUserAccount(username, password) {
         'INSERT INTO users (id,username,username_key,password_hash,recovery_code_hash,recovery_code_created_at) VALUES ($1,$2,$3,$4,$5,NOW())',
         [id, username, usernameKey, passwordHash, recoveryHash]
       );
-      const user = profileFromRow({ id, username, avatar:'', avatar_scale:1.35, avatar_x:0, avatar_y:0, bio:'', status_text:'', theme_color:'#7a3cff', created_at:new Date() });
+      const user = profileFromRow({ id, username, avatar:'', avatar_scale:1.35, avatar_x:0, avatar_y:0, bio:'', status_text:'', theme_color:'#7a3cff', preferences:{}, created_at:new Date() });
       return { user, recoveryCode };
     } catch (error) {
       if (error?.code === '23505') throw new Error('Esse login já está em uso.');
@@ -375,7 +378,7 @@ async function createUserAccount(username, password) {
     }
   }
   if (memoryUsers.has(usernameKey)) throw new Error('Esse login já está em uso.');
-  memoryUsers.set(usernameKey, { id, username, usernameKey, passwordHash, recoveryCodeHash: recoveryHash, recoveryCodeCreatedAt: Date.now(), avatar:'', avatarScale:1.35, avatarOffsetX:0, avatarOffsetY:0, bio:'', status:'', themeColor:'#7a3cff', createdAt: Date.now() });
+  memoryUsers.set(usernameKey, { id, username, usernameKey, passwordHash, recoveryCodeHash: recoveryHash, recoveryCodeCreatedAt: Date.now(), avatar:'', avatarScale:1.35, avatarOffsetX:0, avatarOffsetY:0, bio:'', status:'', themeColor:'#7a3cff', preferences:{}, createdAt: Date.now() });
   return { user: profileFromRow(memoryUsers.get(usernameKey)), recoveryCode };
 }
 
@@ -404,7 +407,7 @@ async function recoverUserAccount(username, recoveryCode, newPassword) {
 
   if (databaseReady) {
     const { rows } = await dbPool.query(
-      'SELECT id,username,recovery_code_hash,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,created_at FROM users WHERE username_key=$1 LIMIT 1',
+      'SELECT id,username,recovery_code_hash,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,preferences,created_at FROM users WHERE username_key=$1 LIMIT 1',
       [usernameKey]
     );
     const row = rows[0];
@@ -431,7 +434,7 @@ async function recoverUserAccount(username, recoveryCode, newPassword) {
 async function authenticateUser(username, password) {
   const usernameKey = username.toLowerCase();
   if (databaseReady) {
-    const { rows } = await dbPool.query('SELECT id,username,password_hash,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,created_at FROM users WHERE username_key=$1 LIMIT 1', [usernameKey]);
+    const { rows } = await dbPool.query('SELECT id,username,password_hash,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,preferences,created_at FROM users WHERE username_key=$1 LIMIT 1', [usernameKey]);
     const row = rows[0];
     if (!row || !verifyPassword(password, row.password_hash)) return null;
     await dbPool.query('UPDATE users SET last_login_at=NOW() WHERE id=$1', [row.id]);
@@ -463,7 +466,7 @@ async function currentUserFromRequest(req) {
   const tokenHash = sessionTokenHash(token);
   if (databaseReady) {
     const { rows } = await dbPool.query(`
-      SELECT u.id,u.username,u.avatar,u.avatar_scale,u.avatar_x,u.avatar_y,u.bio,u.status_text,u.theme_color,u.created_at FROM sessions s JOIN users u ON u.id=s.user_id
+      SELECT u.id,u.username,u.avatar,u.avatar_scale,u.avatar_x,u.avatar_y,u.bio,u.status_text,u.theme_color,u.preferences,u.created_at FROM sessions s JOIN users u ON u.id=s.user_id
       WHERE s.token_hash=$1 AND s.expires_at > NOW() LIMIT 1
     `, [tokenHash]);
     return profileFromRow(rows[0]);
@@ -614,6 +617,34 @@ app.post('/api/profile/update', async (req,res) => {
   } catch (error) { res.status(500).json({ok:false,error:'Não foi possível salvar o perfil.'}); }
 });
 
+
+function cleanUserPreferences(value) {
+  const input = value && typeof value === 'object' ? value : {};
+  return {
+    transmissionVolume: Math.min(1, Math.max(0, Number(input.transmissionVolume ?? 0.9) || 0)),
+    voiceVolume: Math.min(1, Math.max(0, Number(input.voiceVolume ?? 0.9) || 0)),
+    voiceOutputMuted: Boolean(input.voiceOutputMuted),
+    transmissionMuted: Boolean(input.transmissionMuted),
+    shareAudio: Boolean(input.shareAudio)
+  };
+}
+
+app.post('/api/preferences/update', async (req,res) => {
+  try {
+    const user = await currentUserFromRequest(req);
+    if (!user) return res.status(401).json({ok:false,error:'Faça login.'});
+    const preferences = cleanUserPreferences(req.body?.preferences);
+    if (databaseReady) {
+      await dbPool.query('UPDATE users SET preferences=$1::jsonb WHERE id=$2', [JSON.stringify(preferences), user.id]);
+    } else {
+      for (const row of memoryUsers.values()) if (row.id===user.id) row.preferences=preferences;
+    }
+    res.json({ok:true,preferences});
+  } catch {
+    res.status(500).json({ok:false,error:'Não foi possível salvar suas preferências.'});
+  }
+});
+
 app.get('/api/users/search', async (req,res) => {
   try {
     const viewer = await currentUserFromRequest(req);
@@ -622,7 +653,7 @@ app.get('/api/users/search', async (req,res) => {
     if (!q) return res.json({ok:true,users:[]});
     let profiles=[];
     if (databaseReady) {
-      const {rows}=await dbPool.query("SELECT id,username,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,created_at FROM users WHERE username_key LIKE $1 AND id<>$2 ORDER BY username_key LIMIT 12", [`%${q}%`,viewer.id]);
+      const {rows}=await dbPool.query("SELECT id,username,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,preferences,created_at FROM users WHERE username_key LIKE $1 AND id<>$2 ORDER BY username_key LIMIT 12", [`%${q}%`,viewer.id]);
       profiles=rows.map(profileFromRow);
     } else {
       profiles=[...memoryUsers.values()].filter(r=>r.id!==viewer.id && r.usernameKey.includes(q)).slice(0,12).map(profileFromRow);
@@ -886,7 +917,7 @@ function cleanAvatar(value) {
   const avatar = String(value || '');
   if (!avatar) return '';
   if (!avatar.startsWith('data:image/')) return '';
-  if (avatar.length > 1900000) return '';
+  if (avatar.length > 3200000) return '';
   return avatar;
 }
 
