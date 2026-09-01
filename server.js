@@ -2,7 +2,9 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
+const fs = require('fs');
 const { Server } = require('socket.io');
+const { Pool } = require('pg');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,11 +16,262 @@ const io = new Server(server, {
 const PORT = Number(process.env.PORT) || 3000;
 const rooms = new Map();
 
+const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
+const dbPool = DATABASE_URL ? new Pool({
+  connectionString: DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+}) : null;
+let databaseReady = false;
+const memoryUsers = new Map();
+const memorySessions = new Map();
+
+function calculateAppVersion() {
+  try {
+    const hash = crypto.createHash('sha256');
+    const versionFiles = [
+      path.join(__dirname, 'server.js'),
+      path.join(__dirname, 'public', 'app.js'),
+      path.join(__dirname, 'public', 'index.html'),
+      path.join(__dirname, 'public', 'style.css')
+    ];
+    for (const file of versionFiles) hash.update(fs.readFileSync(file));
+    return hash.digest('hex').slice(0, 12);
+  } catch {
+    return String(process.env.APP_VERSION || 'dev');
+  }
+}
+
+const APP_VERSION = String(process.env.APP_VERSION || calculateAppVersion());
+
+function cleanAccountUsername(value) {
+  const username = String(value || '').trim().replace(/\s+/g, '').slice(0, 24);
+  if (!/^[A-Za-z0-9_.-]{3,24}$/.test(username)) return '';
+  return username;
+}
+
+function validateAccountPassword(value) {
+  const password = String(value || '');
+  return password.length >= 6 && password.length <= 72 ? password : '';
+}
+
+function parseCookies(req) {
+  const header = String(req.headers.cookie || '');
+  const result = {};
+  for (const part of header.split(';')) {
+    const index = part.indexOf('=');
+    if (index < 0) continue;
+    const key = decodeURIComponent(part.slice(0, index).trim());
+    const value = decodeURIComponent(part.slice(index + 1).trim());
+    result[key] = value;
+  }
+  return result;
+}
+
+function sessionTokenHash(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function setSessionCookie(res, token) {
+  const maxAge = 30 * 24 * 60 * 60;
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `lnz_session=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`);
+}
+
+function clearSessionCookie(res) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `lnz_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${secure}`);
+}
+
+async function initDatabase() {
+  if (!dbPool) {
+    console.warn('[Banco] DATABASE_URL não configurado. Contas funcionarão apenas enquanto o servidor estiver ligado.');
+    return false;
+  }
+  try {
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY,
+        username VARCHAR(24) NOT NULL,
+        username_key VARCHAR(24) UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_login_at TIMESTAMPTZ
+      );
+      CREATE TABLE IF NOT EXISTS sessions (
+        token_hash CHAR(64) PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS sessions_expires_idx ON sessions(expires_at);
+      CREATE TABLE IF NOT EXISTS feedbacks (
+        id UUID PRIMARY KEY,
+        type VARCHAR(20) NOT NULL,
+        rating SMALLINT NOT NULL,
+        message VARCHAR(1000) NOT NULL,
+        contact VARCHAR(100),
+        nickname VARCHAR(24),
+        room_code VARCHAR(9),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    databaseReady = true;
+    const { rows } = await dbPool.query(`SELECT id,type,rating,message,contact,nickname,room_code,created_at FROM feedbacks ORDER BY created_at DESC LIMIT 200`);
+    feedbackItems.splice(0, feedbackItems.length, ...rows.reverse().map((row) => ({
+      id: row.id,
+      type: row.type,
+      rating: Number(row.rating),
+      message: row.message,
+      contact: row.contact || '',
+      nickname: row.nickname || '',
+      roomCode: row.room_code || '',
+      createdAt: new Date(row.created_at).getTime()
+    })));
+    console.log('[Banco] PostgreSQL conectado.');
+    return true;
+  } catch (error) {
+    databaseReady = false;
+    console.error('[Banco] Falha ao iniciar PostgreSQL:', error?.message || error);
+    return false;
+  }
+}
+
+async function createUserAccount(username, password) {
+  const id = crypto.randomUUID();
+  const usernameKey = username.toLowerCase();
+  const passwordHash = hashPassword(password);
+  if (databaseReady) {
+    try {
+      await dbPool.query('INSERT INTO users (id,username,username_key,password_hash) VALUES ($1,$2,$3,$4)', [id, username, usernameKey, passwordHash]);
+      return { id, username };
+    } catch (error) {
+      if (error?.code === '23505') throw new Error('Esse login já está em uso.');
+      throw error;
+    }
+  }
+  if (memoryUsers.has(usernameKey)) throw new Error('Esse login já está em uso.');
+  memoryUsers.set(usernameKey, { id, username, usernameKey, passwordHash, createdAt: Date.now() });
+  return { id, username };
+}
+
+async function authenticateUser(username, password) {
+  const usernameKey = username.toLowerCase();
+  if (databaseReady) {
+    const { rows } = await dbPool.query('SELECT id,username,password_hash FROM users WHERE username_key=$1 LIMIT 1', [usernameKey]);
+    const row = rows[0];
+    if (!row || !verifyPassword(password, row.password_hash)) return null;
+    await dbPool.query('UPDATE users SET last_login_at=NOW() WHERE id=$1', [row.id]);
+    return { id: row.id, username: row.username };
+  }
+  const row = memoryUsers.get(usernameKey);
+  if (!row || !verifyPassword(password, row.passwordHash)) return null;
+  return { id: row.id, username: row.username };
+}
+
+async function createSessionForUser(user) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = sessionTokenHash(token);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  if (databaseReady) {
+    await dbPool.query('INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2,$3)', [tokenHash, user.id, expiresAt]);
+  } else {
+    memorySessions.set(tokenHash, { userId: user.id, username: user.username, expiresAt: expiresAt.getTime() });
+  }
+  return token;
+}
+
+async function currentUserFromRequest(req) {
+  const token = parseCookies(req).lnz_session;
+  if (!token) return null;
+  const tokenHash = sessionTokenHash(token);
+  if (databaseReady) {
+    const { rows } = await dbPool.query(`
+      SELECT u.id,u.username FROM sessions s JOIN users u ON u.id=s.user_id
+      WHERE s.token_hash=$1 AND s.expires_at > NOW() LIMIT 1
+    `, [tokenHash]);
+    return rows[0] || null;
+  }
+  const session = memorySessions.get(tokenHash);
+  if (!session || session.expiresAt <= Date.now()) {
+    memorySessions.delete(tokenHash);
+    return null;
+  }
+  return { id: session.userId, username: session.username };
+}
+
+async function destroySession(req) {
+  const token = parseCookies(req).lnz_session;
+  if (!token) return;
+  const tokenHash = sessionTokenHash(token);
+  if (databaseReady) await dbPool.query('DELETE FROM sessions WHERE token_hash=$1', [tokenHash]);
+  else memorySessions.delete(tokenHash);
+}
+
+app.get('/api/auth/me', async (req, res) => {
+  try {
+    const user = await currentUserFromRequest(req);
+    res.json({ ok: true, user, persistentDatabase: databaseReady });
+  } catch {
+    res.status(500).json({ ok: false, error: 'Não foi possível consultar sua conta.' });
+  }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  const username = cleanAccountUsername(req.body?.username);
+  const password = validateAccountPassword(req.body?.password);
+  if (!username) return res.status(400).json({ ok: false, error: 'Use um login de 3 a 24 caracteres: letras, números, ponto, hífen ou _.' });
+  if (!password) return res.status(400).json({ ok: false, error: 'A senha precisa ter entre 6 e 72 caracteres.' });
+  try {
+    const user = await createUserAccount(username, password);
+    const token = await createSessionForUser(user);
+    setSessionCookie(res, token);
+    res.json({ ok: true, user, persistentDatabase: databaseReady });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error?.message || 'Não foi possível criar a conta.' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const username = cleanAccountUsername(req.body?.username);
+  const password = validateAccountPassword(req.body?.password);
+  if (!username || !password) return res.status(400).json({ ok: false, error: 'Login ou senha inválidos.' });
+  try {
+    const user = await authenticateUser(username, password);
+    if (!user) return res.status(401).json({ ok: false, error: 'Login ou senha incorretos.' });
+    const token = await createSessionForUser(user);
+    setSessionCookie(res, token);
+    res.json({ ok: true, user, persistentDatabase: databaseReady });
+  } catch {
+    res.status(500).json({ ok: false, error: 'Não foi possível entrar na conta.' });
+  }
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  try { await destroySession(req); } catch {}
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+
 app.disable('x-powered-by');
+app.use(express.json({ limit: '64kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, rooms: rooms.size, feedbacks: feedbackItems.length });
+  res.json({ ok: true, rooms: rooms.size, feedbacks: feedbackItems.length, database: databaseReady ? 'postgres' : 'memory' });
+});
+
+app.get('/version', (_req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.json({ ok: true, version: APP_VERSION });
+});
+
+app.get('/public/feedback', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    ok: true,
+    feedbacks: feedbackItems.slice().reverse().slice(0, 60).map(publicFeedbackView)
+  });
 });
 
 app.get('/config.js', (_req, res) => {
@@ -38,7 +291,8 @@ app.get('/config.js', (_req, res) => {
     `window.LNZ_CONFIG = ${JSON.stringify({ 
       iceServers,
       discordUrl: process.env.DISCORD_URL || 'https://discord.gg/m67kQeZrns',
-      brandName: process.env.BRAND_NAME || 'LNZ Transmissão'
+      brandName: process.env.BRAND_NAME || 'LNZ Transmissão',
+      appVersion: APP_VERSION
     })};`
   );
 });
@@ -195,6 +449,17 @@ function cleanFeedbackRating(value) {
   return Math.min(5, Math.max(1, Math.round(rating)));
 }
 
+function publicFeedbackView(item) {
+  return {
+    id: item.id,
+    type: item.type,
+    rating: item.rating,
+    message: item.message,
+    nickname: item.nickname || 'Visitante',
+    createdAt: item.createdAt
+  };
+}
+
 async function forwardFeedbackToDiscord(item) {
   const webhook = String(process.env.FEEDBACK_WEBHOOK_URL || '').trim();
   if (!webhook) return { sent: false, reason: 'not-configured' };
@@ -281,7 +546,8 @@ function participantView(id, participant, room) {
     isHost: room.hostId === id,
     isSharer: room.sharerId === id,
     inVoice: Boolean(participant.inVoice),
-    micMuted: Boolean(participant.micMuted)
+    micMuted: Boolean(participant.micMuted),
+    speaking: Boolean(participant.speaking) && Boolean(participant.inVoice) && !Boolean(participant.micMuted)
   };
 }
 
@@ -346,6 +612,12 @@ function removeSocketFromRoom(socket, reason = 'left') {
 
 io.on('connection', (socket) => {
   socket.emit('public-rooms-updated', publicRooms());
+  socket.emit('app-version', { version: APP_VERSION });
+  socket.emit('public-feedback-updated', feedbackItems.slice().reverse().slice(0, 60).map(publicFeedbackView));
+
+  socket.on('list-public-feedback', (callback = () => {}) => {
+    callback({ ok: true, feedbacks: feedbackItems.slice().reverse().slice(0, 60).map(publicFeedbackView) });
+  });
 
   socket.on('list-public-rooms', (callback = () => {}) => {
     callback({ ok: true, rooms: publicRooms() });
@@ -396,7 +668,8 @@ io.on('connection', (socket) => {
       avatarOffsetX: cleanAvatarOffsetX(avatarOffsetX),
       avatarOffsetY: cleanAvatarOffsetY(avatarOffsetY),
       inVoice: false,
-      micMuted: false
+      micMuted: false,
+      speaking: false
     });
 
     rooms.set(code, room);
@@ -436,7 +709,8 @@ io.on('connection', (socket) => {
       avatarOffsetX: cleanAvatarOffsetX(avatarOffsetX),
       avatarOffsetY: cleanAvatarOffsetY(avatarOffsetY),
       inVoice: false,
-      micMuted: false
+      micMuted: false,
+      speaking: false
     });
     socket.join(code);
     socket.data.roomCode = code;
@@ -526,6 +800,7 @@ io.on('connection', (socket) => {
 
     participant.inVoice = true;
     participant.micMuted = false;
+    participant.speaking = false;
     callback({ ok: true, peerIds });
     socket.to(code).emit('voice-user-joined', { userId: socket.id });
     broadcastRoomState(room);
@@ -538,6 +813,7 @@ io.on('connection', (socket) => {
     if (room && participant?.inVoice) {
       participant.inVoice = false;
       participant.micMuted = false;
+      participant.speaking = false;
       socket.to(code).emit('voice-user-left', { userId: socket.id });
       broadcastRoomState(room);
     }
@@ -550,7 +826,21 @@ io.on('connection', (socket) => {
     const participant = room?.participants.get(socket.id);
     if (!room || !participant?.inVoice) return callback({ ok: false });
     participant.micMuted = Boolean(muted);
+    if (participant.micMuted) participant.speaking = false;
     broadcastRoomState(room);
+    callback({ ok: true });
+  });
+
+  socket.on('voice-speaking-state', ({ speaking }, callback = () => {}) => {
+    const code = socket.data.roomCode;
+    const room = rooms.get(code);
+    const participant = room?.participants.get(socket.id);
+    if (!room || !participant?.inVoice) return callback({ ok: false });
+    const next = Boolean(speaking) && !participant.micMuted;
+    if (participant.speaking !== next) {
+      participant.speaking = next;
+      broadcastRoomState(room);
+    }
     callback({ ok: true });
   });
 
@@ -590,7 +880,13 @@ io.on('connection', (socket) => {
 
     feedbackItems.push(item);
     while (feedbackItems.length > MAX_FEEDBACK_ITEMS) feedbackItems.shift();
+    if (databaseReady) {
+      dbPool.query('INSERT INTO feedbacks (id,type,rating,message,contact,nickname,room_code,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [
+        item.id, item.type, item.rating, item.message, item.contact || null, item.nickname || null, item.roomCode || null, new Date(item.createdAt)
+      ]).catch((error) => console.error('[Banco] Falha ao salvar feedback:', error?.message || error));
+    }
     socket.data.lastFeedbackAt = now;
+    io.emit('public-feedback-added', publicFeedbackView(item));
 
     const discordResult = await forwardFeedbackToDiscord(item);
     console.log(`[Feedback] ${item.type} ${item.rating}/5 ${item.nickname || 'Visitante'}: ${item.message.slice(0, 120)}`);
@@ -645,6 +941,8 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`LNZ Transmissão online em http://localhost:${PORT}`);
+initDatabase().finally(() => {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`LNZ Transmissão online em http://localhost:${PORT}`);
+  });
 });

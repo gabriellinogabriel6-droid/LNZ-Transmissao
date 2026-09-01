@@ -16,6 +16,14 @@
   <div class="background-art"></div>
   <div class="noise"></div>
 
+  <div id="updateBanner" class="update-banner hidden" role="status">
+    <div>
+      <strong>✨ Nova versão disponível</strong>
+      <span>O LNZ Transmissão foi atualizado. Recarregue a página para usar a versão nova.</span>
+    </div>
+    <button id="reloadSite" class="btn btn-primary" type="button">Atualizar agora</button>
+  </div>
+
   <main id="landingView" class="landing-view">
     <section class="landing-shell">
       <div class="hero-copy">
@@ -32,6 +40,7 @@
         <div class="hero-actions">
           <button id="heroCreateRoom" class="btn btn-primary hero-main-btn">Criar sala agora</button>
           <a id="discordButton" class="btn btn-outline hero-discord-btn hidden" href="#" target="_blank" rel="noopener noreferrer">Entrar no Discord</a>
+          <button id="heroFeedbacks" class="btn btn-outline hero-discord-btn" type="button">💬 Ver feedbacks</button>
         </div>
       </div>
 
@@ -54,6 +63,11 @@
         <div class="avatar-actions">
           <button id="adjustAvatarLanding" class="btn btn-outline small-btn" type="button">✦ Ajustar foto</button>
           <button id="removeAvatarLanding" class="btn btn-outline small-btn" type="button">Remover foto</button>
+        </div>
+        <button id="accountButton" class="btn btn-outline btn-wide account-entry-btn" type="button">👤 Entrar / Criar conta</button>
+        <div id="accountSignedIn" class="account-signed-in hidden">
+          <span>Conectado como <b id="accountUsernameLabel">—</b></span>
+          <button id="accountLogoutQuick" type="button">Sair</button>
         </div>
         <button id="openCreateRoom" class="btn btn-primary btn-wide">＋ Criar sala</button>
 
@@ -179,7 +193,8 @@
         <button id="voiceCallControl" class="control-voice" type="button" title="Entrar na call de voz">📞 Entrar na call</button>
         <button id="micControl" class="control-voice mic-control" type="button" title="Ligar/desligar microfone" disabled>🎙 Mic ON</button>
         <span></span>
-        <button id="audioControl" class="control-audio" type="button" title="Ativar áudio da aba na próxima transmissão">🔇 Áudio da aba OFF</button>
+        <button id="audioControl" class="control-audio" type="button" title="Ativar áudio da aba na próxima transmissão">🔇 Áudio OFF</button>
+        <button id="mixerControl" class="control-audio mixer-open-btn" type="button" title="Mix de volume">🎚 Mix</button>
         <span></span>
         <button id="chatControl" class="control-chat" type="button" title="Abrir chat">💬 Chat <b id="chatUnread" class="chat-unread hidden">0</b></button>
         <span></span>
@@ -187,6 +202,38 @@
         <span></span>
         <button id="leaveControl" class="control-icon leave-icon" title="Sair da sala">↪</button>
       </div>
+
+      <div id="audioMixerPanel" class="audio-mixer-panel hidden">
+        <div class="mixer-title">
+          <strong>Mix de volume</strong>
+          <span>Controle separado da call e da transmissão</span>
+        </div>
+
+        <div class="mixer-block">
+          <div class="mixer-head">
+            <strong>Transmissão</strong>
+            <button id="mixerToggleTransmission" class="mixer-mute-btn" type="button">🔊 Ouvindo</button>
+          </div>
+          <div class="mixer-range-row">
+            <input id="transmissionVolume" type="range" min="0" max="100" step="1" value="90" />
+            <span id="transmissionVolumeValue">90%</span>
+          </div>
+          <small>Quem estiver assistindo pode baixar ou mutar só o som da transmissão.</small>
+        </div>
+
+        <div class="mixer-block">
+          <div class="mixer-head">
+            <strong>Call de voz</strong>
+            <button id="mixerToggleVoice" class="mixer-mute-btn" type="button">🔊 Ouvindo</button>
+          </div>
+          <div class="mixer-range-row">
+            <input id="voiceVolume" type="range" min="0" max="100" step="1" value="90" />
+            <span id="voiceVolumeValue">90%</span>
+          </div>
+          <small>Controla separadamente o volume das pessoas na call.</small>
+        </div>
+      </div>
+
       <div id="voiceAudioContainer" class="voice-audio-container" aria-hidden="true"></div>
     </section>
 
@@ -226,7 +273,10 @@
     </aside>
   </main>
 
-  <button id="feedbackButton" class="feedback-fab" type="button" title="Enviar feedback">💜 <span>Feedback</span></button>
+  <div class="feedback-fab-stack">
+    <button id="publicFeedbackButton" class="feedback-fab feedback-list-fab" type="button" title="Ver feedbacks da comunidade">💬 <span>Feedbacks</span></button>
+    <button id="feedbackButton" class="feedback-fab" type="button" title="Enviar feedback">💜 <span>Enviar feedback</span></button>
+  </div>
 
   <div id="createModal" class="modal hidden" aria-hidden="true">
     <div class="modal-backdrop" data-close-modal="true"></div>
@@ -301,6 +351,69 @@
 
       <button id="sendFeedback" class="btn btn-primary btn-wide" type="button">Enviar feedback</button>
       <small class="feedback-privacy">Não envie senhas, tokens ou informações privadas.</small>
+    </div>
+  </div>
+
+  <div id="publicFeedbackModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close-public-feedback="true"></div>
+    <div class="modal-card glass-card public-feedback-card">
+      <div class="modal-head">
+        <div><span>COMUNIDADE</span><h2>Feedbacks do LNZ</h2></div>
+        <button id="closePublicFeedback" class="modal-close" type="button">×</button>
+      </div>
+
+      <div class="feedback-public-summary">
+        <div><strong id="publicFeedbackAverage">—</strong><span>nota média</span></div>
+        <div><strong id="publicFeedbackCount">0</strong><span>feedbacks</span></div>
+        <button id="refreshPublicFeedback" class="icon-btn" type="button" title="Atualizar feedbacks">↻</button>
+      </div>
+
+      <div id="publicFeedbackList" class="public-feedback-list"></div>
+      <div id="publicFeedbackEmpty" class="public-feedback-empty">Ainda não há feedbacks públicos. Seja o primeiro.</div>
+
+      <button id="writeFeedbackFromPublic" class="btn btn-primary btn-wide" type="button">💜 Enviar meu feedback</button>
+      <small class="feedback-privacy">O contato opcional nunca aparece publicamente.</small>
+    </div>
+  </div>
+
+  <div id="authModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close-auth="true"></div>
+    <div class="modal-card glass-card auth-card">
+      <div class="modal-head">
+        <div><span>CONTA LNZ</span><h2 id="authTitle">Entrar na sua conta</h2></div>
+        <button id="closeAuth" class="modal-close" type="button">×</button>
+      </div>
+
+      <div id="authLoggedOut">
+        <div class="auth-tabs">
+          <button id="authLoginTab" class="auth-tab active" type="button">Entrar</button>
+          <button id="authRegisterTab" class="auth-tab" type="button">Criar conta</button>
+        </div>
+
+        <div class="field">
+          <label for="authUsername">LOGIN</label>
+          <input id="authUsername" maxlength="24" autocomplete="username" placeholder="Seu login" />
+          <small class="helper">3 a 24 caracteres: letras, números, ponto, hífen ou _.</small>
+        </div>
+        <div class="field auth-field-gap">
+          <label for="authPassword">SENHA</label>
+          <input id="authPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Sua senha" />
+        </div>
+        <div id="authConfirmWrap" class="field auth-field-gap hidden">
+          <label for="authPasswordConfirm">CONFIRMAR SENHA</label>
+          <input id="authPasswordConfirm" type="password" maxlength="72" autocomplete="new-password" placeholder="Digite a senha novamente" />
+        </div>
+        <div id="authError" class="auth-error hidden"></div>
+        <button id="authSubmit" class="btn btn-primary btn-wide" type="button">Entrar</button>
+        <small id="authDatabaseStatus" class="auth-db-status">Conta protegida por senha criptografada.</small>
+      </div>
+
+      <div id="authLoggedIn" class="auth-logged-in hidden">
+        <div class="auth-user-icon">👤</div>
+        <strong id="authLoggedInUsername">—</strong>
+        <span>Sua conta está conectada neste navegador.</span>
+        <button id="authLogout" class="btn btn-outline btn-wide" type="button">Sair da conta</button>
+      </div>
     </div>
   </div>
 

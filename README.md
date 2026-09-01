@@ -85,3 +85,12 @@ Importante:
 - a janela de escolha do que compartilhar é do próprio **Chrome/Edge**, então o texto e os botões dela não podem ser personalizados pelo site;
 - em alguns PCs o navegador libera áudio da **Tela inteira**; em outros, só de **Janela** ou **Guia/Aba**;
 - se você ativar áudio na tela inteira, pode captar sons do sistema, inclusive Discord, jogo, música e notificações.
+
+## Áudio + call (ajuste mais recente)
+
+- O compartilhamento de tela inicia com envio de áudio habilitado. O navegador ainda mostra a opção de áudio disponível para a fonte escolhida.
+- `suppressLocalAudioPlayback` fica desativado: ao transmitir áudio do sistema, o site não pede ao navegador para silenciar o som local do PC/Discord.
+- O transmissor continua com o preview local mudo para não ouvir a própria transmissão dentro do site.
+- Quem assiste controla individualmente o som da transmissão com ON/OFF e volume no painel **Mix**.
+- O volume da **Call de voz** é separado do volume da **Transmissão**.
+- Participantes na call aparecem como **Falando agora**, **Na call • Em silêncio** ou **Na call • Mic OFF**. O avatar ganha destaque enquanto a pessoa fala.

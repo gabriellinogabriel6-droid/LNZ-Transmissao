@@ -20,8 +20,14 @@ const state = {
   selectedChatFile: null,
   unreadChat: 0,
   selectedVisibility: 'public',
-  shareAudio: false,
+  shareAudio: true,
   remoteAudioMuted: false,
+  transmissionVolume: Math.min(1, Math.max(0, Number(localStorage.getItem('lnz_transmission_volume') || 0.9))),
+  voiceVolume: Math.min(1, Math.max(0, Number(localStorage.getItem('lnz_voice_volume') || 0.9))),
+  voiceOutputMuted: localStorage.getItem('lnz_voice_output_muted') === '1',
+  mixerOpen: false,
+  account: null,
+  authMode: 'login',
   isSharing: false,
   localStream: null,
   sharerId: null,
@@ -33,6 +39,11 @@ const state = {
   voicePeers: new Map(),
   voiceAudios: new Map(),
   voicePendingIce: new Map(),
+  voiceSpeaking: false,
+  voiceSpeakingContext: null,
+  voiceSpeakingTimer: null,
+  voiceSpeakingSource: null,
+  voiceSpeakingLastLoudAt: 0,
   feedbackType: 'sugestao',
   feedbackRating: 5
 };
@@ -578,13 +589,27 @@ function renderRoom() {
     const name = document.createElement('strong');
     name.textContent = person.nickname;
     const sub = document.createElement('span');
-    sub.textContent = person.id === state.me ? 'Você' : (person.isSharer ? 'Compartilhando tela' : 'Conectado');
+    if (person.inVoice) {
+      if (person.micMuted) sub.textContent = 'Na call • Mic OFF';
+      else if (person.speaking) sub.textContent = 'Falando agora';
+      else sub.textContent = 'Na call • Em silêncio';
+    } else if (person.isSharer) {
+      sub.textContent = 'Compartilhando tela';
+    } else {
+      sub.textContent = person.id === state.me ? 'Você' : 'Conectado';
+    }
     details.append(name, sub);
+
+    if (person.speaking && person.inVoice && !person.micMuted) row.classList.add('speaking');
 
     const badges = document.createElement('div');
     badges.className = 'participant-badges';
     if (person.isHost) badges.innerHTML += '<b title="Dono da sala">♛</b>';
-    if (person.inVoice) badges.innerHTML += person.micMuted ? '<span class="voice-badge muted" title="Na call com microfone mutado">🔇</span>' : '<span class="voice-badge" title="Na call de voz">🎙</span>';
+    if (person.inVoice) {
+      if (person.micMuted) badges.innerHTML += '<span class="voice-badge muted" title="Na call com microfone desligado">🔇</span>';
+      else if (person.speaking) badges.innerHTML += '<span class="voice-badge speaking" title="Falando agora">🔊</span>';
+      else badges.innerHTML += '<span class="voice-badge" title="Na call de voz">🎙</span>';
+    }
     if (person.id === state.me) badges.innerHTML += '<em>VOCÊ</em>';
 
     row.append(avatar, details, badges);
@@ -917,8 +942,8 @@ function attachRemoteVoice(peerId, stream) {
     state.voiceAudios.set(peerId, audio);
   }
   audio.srcObject = stream;
-  audio.muted = false;
-  audio.volume = 1;
+  audio.muted = state.voiceOutputMuted;
+  audio.volume = state.voiceOutputMuted ? 0 : state.voiceVolume;
   audio.play().catch(() => {});
 }
 
@@ -957,6 +982,63 @@ async function createVoicePeer(peerId, initiator = false) {
   return pc;
 }
 
+function stopVoiceSpeakingDetector(notify = true) {
+  if (state.voiceSpeakingTimer) {
+    cancelAnimationFrame(state.voiceSpeakingTimer);
+    state.voiceSpeakingTimer = null;
+  }
+  try { state.voiceSpeakingSource?.disconnect(); } catch {}
+  state.voiceSpeakingSource = null;
+  if (state.voiceSpeakingContext) {
+    state.voiceSpeakingContext.close().catch(() => {});
+    state.voiceSpeakingContext = null;
+  }
+  if (state.voiceSpeaking && notify) socket.emit('voice-speaking-state', { speaking: false }, () => {});
+  state.voiceSpeaking = false;
+  state.voiceSpeakingLastLoudAt = 0;
+}
+
+function setLocalSpeakingState(speaking) {
+  const next = Boolean(speaking) && !state.voiceMuted && state.voiceJoined;
+  if (next === state.voiceSpeaking) return;
+  state.voiceSpeaking = next;
+  socket.emit('voice-speaking-state', { speaking: next }, () => {});
+}
+
+function startVoiceSpeakingDetector(stream) {
+  stopVoiceSpeakingDetector(false);
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const context = new AudioCtx();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.72;
+    const source = context.createMediaStreamSource(stream);
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.fftSize);
+    state.voiceSpeakingContext = context;
+    state.voiceSpeakingSource = source;
+
+    const tick = () => {
+      if (!state.voiceJoined || !state.voiceStream) return;
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const sample = (data[i] - 128) / 128;
+        sum += sample * sample;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      const now = performance.now();
+      if (!state.voiceMuted && rms > 0.045) state.voiceSpeakingLastLoudAt = now;
+      const speaking = !state.voiceMuted && (now - state.voiceSpeakingLastLoudAt) < 420;
+      setLocalSpeakingState(speaking);
+      state.voiceSpeakingTimer = requestAnimationFrame(tick);
+    };
+    state.voiceSpeakingTimer = requestAnimationFrame(tick);
+  } catch {}
+}
+
 function updateVoiceControls() {
   const call = $('voiceCallControl');
   const mic = $('micControl');
@@ -992,6 +1074,7 @@ async function joinVoiceCall() {
     state.voiceStream = stream;
     state.voiceJoined = true;
     state.voiceMuted = false;
+    startVoiceSpeakingDetector(stream);
     updateVoiceControls();
     showToast('Você entrou na call de voz.');
 
@@ -1009,6 +1092,7 @@ async function leaveVoiceCall(notifyServer = true) {
     await new Promise((resolve) => socket.emit('leave-voice', {}, resolve));
   }
   closeAllVoicePeers();
+  stopVoiceSpeakingDetector(true);
   state.voiceStream?.getTracks().forEach((track) => track.stop());
   state.voiceStream = null;
   state.voiceJoined = false;
@@ -1021,6 +1105,7 @@ function toggleVoiceMic() {
   state.voiceMuted = !state.voiceMuted;
   state.voiceStream.getAudioTracks().forEach((track) => { track.enabled = !state.voiceMuted; });
   socket.emit('voice-mic-state', { muted: state.voiceMuted }, () => {});
+  if (state.voiceMuted) setLocalSpeakingState(false);
   updateVoiceControls();
 }
 
@@ -1078,12 +1163,65 @@ function syncStageAudio() {
   const video = $('stageVideo');
   if (!video) return;
   const localPreview = state.isSharing || state.sharerId === state.me;
-  const shouldMute = localPreview || state.remoteAudioMuted;
+  const shouldMute = localPreview || state.remoteAudioMuted || state.transmissionVolume <= 0;
   video.muted = shouldMute;
   video.defaultMuted = shouldMute;
-  video.volume = shouldMute ? 0 : 1;
+  video.volume = shouldMute ? 0 : state.transmissionVolume;
   if (shouldMute) video.setAttribute('muted', '');
   else video.removeAttribute('muted');
+}
+
+function syncVoiceOutputVolume() {
+  for (const audio of state.voiceAudios.values()) {
+    audio.muted = state.voiceOutputMuted || state.voiceVolume <= 0;
+    audio.volume = audio.muted ? 0 : state.voiceVolume;
+    if (!audio.muted) audio.play().catch(() => {});
+  }
+}
+
+function updateMixerUI() {
+  const panel = $('audioMixerPanel');
+  if (!panel) return;
+  panel.classList.toggle('hidden', !state.mixerOpen);
+
+  const transmission = $('transmissionVolume');
+  const voice = $('voiceVolume');
+  if (transmission) transmission.value = String(Math.round(state.transmissionVolume * 100));
+  if (voice) voice.value = String(Math.round(state.voiceVolume * 100));
+  if ($('transmissionVolumeValue')) $('transmissionVolumeValue').textContent = `${Math.round(state.transmissionVolume * 100)}%`;
+  if ($('voiceVolumeValue')) $('voiceVolumeValue').textContent = `${Math.round(state.voiceVolume * 100)}%`;
+
+  const transmissionMuted = state.remoteAudioMuted || state.transmissionVolume <= 0;
+  const transmissionBtn = $('mixerToggleTransmission');
+  if (transmissionBtn) {
+    transmissionBtn.textContent = transmissionMuted ? '🔇 Mutado' : '🔊 Ouvindo';
+    transmissionBtn.classList.toggle('is-muted', transmissionMuted);
+  }
+
+  const voiceMuted = state.voiceOutputMuted || state.voiceVolume <= 0;
+  const voiceBtn = $('mixerToggleVoice');
+  if (voiceBtn) {
+    voiceBtn.textContent = voiceMuted ? '🔇 Mutado' : '🔊 Ouvindo';
+    voiceBtn.classList.toggle('is-muted', voiceMuted);
+  }
+}
+
+function setTransmissionVolume(value) {
+  state.transmissionVolume = Math.min(1, Math.max(0, Number(value) || 0));
+  localStorage.setItem('lnz_transmission_volume', String(state.transmissionVolume));
+  if (state.transmissionVolume > 0 && state.sharerId !== state.me) state.remoteAudioMuted = false;
+  syncStageAudio();
+  updateMixerUI();
+  updateAudioControl();
+}
+
+function setVoiceVolume(value) {
+  state.voiceVolume = Math.min(1, Math.max(0, Number(value) || 0));
+  localStorage.setItem('lnz_voice_volume', String(state.voiceVolume));
+  if (state.voiceVolume > 0) state.voiceOutputMuted = false;
+  localStorage.setItem('lnz_voice_output_muted', state.voiceOutputMuted ? '1' : '0');
+  syncVoiceOutputVolume();
+  updateMixerUI();
 }
 
 async function createOutboundPeer(viewerId) {
@@ -1124,7 +1262,7 @@ async function startSharing() {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-        suppressLocalAudioPlayback: true
+        suppressLocalAudioPlayback: false
       } : false,
       systemAudio: state.shareAudio ? 'include' : 'exclude',
       monitorTypeSurfaces: 'include',
@@ -1210,9 +1348,9 @@ function updateAudioControl() {
 
   if (state.sharerId && state.sharerId !== state.me && !state.isSharing) {
     button.disabled = false;
-    button.textContent = state.remoteAudioMuted ? '🔇 Som OFF' : '🔊 Som ON';
+    button.textContent = state.remoteAudioMuted ? '🔇 Transmissão OFF' : '🔊 Transmissão ON';
     button.classList.toggle('audio-on', !state.remoteAudioMuted);
-    button.title = 'Liga ou desliga o áudio da transmissão que você está assistindo.';
+    button.title = 'Você controla o som da transmissão somente no seu navegador.';
     return;
   }
 
@@ -1226,7 +1364,7 @@ function updateAudioControl() {
   }
 
   button.disabled = false;
-  button.textContent = state.shareAudio ? '🔊 Áudio ON' : '🔇 Áudio OFF';
+  button.textContent = state.shareAudio ? '🔊 Enviar áudio ON' : '🔇 Enviar áudio OFF';
   button.classList.toggle('audio-on', state.shareAudio);
   button.title = 'Ative antes de compartilhar. O navegador pode permitir som da tela inteira, janela ou aba, dependendo do sistema.';
 }
@@ -1243,6 +1381,25 @@ $('audioControl').addEventListener('click', () => {
   state.shareAudio = !state.shareAudio;
   updateAudioControl();
   showToast(state.shareAudio ? 'Áudio ativado para a próxima transmissão.' : 'Áudio da transmissão desativado.');
+});
+
+$('mixerControl')?.addEventListener('click', () => {
+  state.mixerOpen = !state.mixerOpen;
+  updateMixerUI();
+});
+$('transmissionVolume')?.addEventListener('input', (event) => setTransmissionVolume(Number(event.target.value) / 100));
+$('voiceVolume')?.addEventListener('input', (event) => setVoiceVolume(Number(event.target.value) / 100));
+$('mixerToggleTransmission')?.addEventListener('click', () => {
+  state.remoteAudioMuted = !state.remoteAudioMuted;
+  syncStageAudio();
+  updateAudioControl();
+  updateMixerUI();
+});
+$('mixerToggleVoice')?.addEventListener('click', () => {
+  state.voiceOutputMuted = !state.voiceOutputMuted;
+  localStorage.setItem('lnz_voice_output_muted', state.voiceOutputMuted ? '1' : '0');
+  syncVoiceOutputVolume();
+  updateMixerUI();
 });
 
 $('shareFromEmpty').addEventListener('click', startSharing);
