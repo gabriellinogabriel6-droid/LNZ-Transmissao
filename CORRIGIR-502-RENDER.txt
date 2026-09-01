@@ -1,0 +1,24 @@
+LNZ TRANSMISSÃO — CORRIGIR 502 NO RENDER
+
+1. Substitua TODOS os arquivos do repositório pelos arquivos desta versão.
+2. No Render abra o Web Service > Settings.
+3. Build Command:
+   npm install
+4. Start Command:
+   npm start
+5. Em Environment Variables:
+   - NÃO precisa criar PORT.
+   - Se existir PORT configurado manualmente, APAGUE essa variável.
+   - Não crie HOST.
+6. Health Check Path:
+   /healthz
+7. Faça Manual Deploy > Clear build cache & deploy (se disponível).
+8. Nos Logs deve aparecer:
+   [Render] LNZ Transmissão ONLINE em http://0.0.0.0:10000
+   ou outra porta fornecida automaticamente pelo Render.
+9. Teste:
+   https://SEU-SITE.onrender.com/healthz
+   Deve aparecer apenas:
+   ok
+
+Se /healthz responder "ok", a porta está correta.

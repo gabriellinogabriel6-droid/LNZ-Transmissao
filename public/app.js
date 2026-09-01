@@ -7,6 +7,38 @@ const config = window.LNZ_CONFIG || {
 
 const $ = (id) => document.getElementById(id);
 
+
+// Solicitações Socket.IO com timeout: evita botão preso para sempre quando o Render
+// está acordando/reconectando ou a rede móvel oscila.
+function socketRequest(eventName, payload = {}, timeoutMs = 9000) {
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = (result) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      resolve(result || { ok: false, error: 'O servidor não respondeu.' });
+    };
+    const timer = setTimeout(() => {
+      finish({ ok: false, timeout: true, error: 'O servidor está demorando para responder. Tente novamente em alguns segundos.' });
+    }, timeoutMs);
+
+    try {
+      if (!socket.connected) socket.connect();
+      socket.emit(eventName, payload, finish);
+    } catch (error) {
+      finish({ ok: false, error: error?.message || 'Falha de conexão com o servidor.' });
+    }
+  });
+}
+
+function setButtonBusy(button, busy, busyText, normalText) {
+  if (!button) return;
+  button.disabled = Boolean(busy);
+  if (busy && busyText) button.textContent = busyText;
+  if (!busy && normalText) button.textContent = normalText;
+}
+
 const state = {
   avatar: localStorage.getItem('lnz_avatar') || '',
   avatarScale: Math.min(3, Math.max(0.5, Number(localStorage.getItem('lnz_avatar_scale') || 1.35))),
@@ -704,8 +736,10 @@ async function loadFriends(showErrors = true) {
     $('acceptedFriendCount').textContent = String(data.friends.length);
     $('incomingFriendCount').textContent = String(data.incoming.length);
     $('outgoingFriendCount').textContent = String(data.outgoing.length);
-    $('friendRequestBadge').textContent = String(data.incoming.length);
-    $('friendRequestBadge').classList.toggle('hidden', data.incoming.length === 0);
+    if ($('friendRequestBadge')) {
+      $('friendRequestBadge').textContent = String(data.incoming.length);
+      $('friendRequestBadge').classList.toggle('hidden', data.incoming.length === 0);
+    }
   } catch (error) {
     if (showErrors) showToast(error.message);
   }
@@ -1276,37 +1310,42 @@ document.querySelectorAll('.visibility-option').forEach((button) => {
 
 $('createRoomConfirm').addEventListener('click', async () => {
   const nickname = $('landingNickname')?.value.trim() || state.nickname || '';
-  const password = $('createPassword').value;
+  const password = $('createPassword')?.value || '';
   if (!nickname) return showToast('Digite seu nickname.');
   if (state.selectedVisibility === 'private' && password.length < 4) {
     return showToast('A senha precisa ter pelo menos 4 caracteres.');
   }
 
-  $('createRoomConfirm').disabled = true;
-  const result = await new Promise((resolve) => socket.emit('create-room', {
-    nickname,
-    avatar: state.avatar,
-    avatarScale: state.avatarScale,
-    avatarOffsetX: state.avatarOffsetX,
-    avatarOffsetY: state.avatarOffsetY,
-    visibility: state.selectedVisibility,
-    password
-  }, resolve));
-  $('createRoomConfirm').disabled = false;
+  const button = $('createRoomConfirm');
+  const normalText = state.selectedVisibility === 'private' ? 'Criar sala privada' : 'Criar sala pública';
+  setButtonBusy(button, true, 'Criando sala...');
+  try {
+    const result = await socketRequest('create-room', {
+      nickname,
+      avatar: state.avatar,
+      avatarScale: state.avatarScale,
+      avatarOffsetX: state.avatarOffsetX,
+      avatarOffsetY: state.avatarOffsetY,
+      visibility: state.selectedVisibility,
+      password
+    }, 10000);
 
-  if (!result?.ok) return showToast(result?.error || 'Não foi possível criar a sala.');
-  saveIdentity(nickname);
-  closeCreateModal();
-  enterActiveRoom(result);
-  history.pushState({}, '', `/room/${result.room.code}`);
-  showToast(result.room.visibility === 'private' ? 'Sala privada criada.' : 'Sala pública criada.');
+    if (!result?.ok) return showToast(result?.error || 'Não foi possível criar a sala.');
+    saveIdentity(nickname);
+    closeCreateModal();
+    enterActiveRoom(result);
+    history.pushState({}, '', `/room/${result.room.code}`);
+    showToast(result.room.visibility === 'private' ? 'Sala privada criada.' : 'Sala criada.');
+  } finally {
+    setButtonBusy(button, false, '', normalText);
+  }
 });
 
 async function openPrejoin(code) {
   const clean = normalizeCode(code);
   if (clean.length !== 9) return showToast('Digite um código válido.');
 
-  const info = await new Promise((resolve) => socket.emit('get-room-info', { roomCode: clean }, resolve));
+  const info = await socketRequest('get-room-info', { roomCode: clean }, 9000);
   if (!info?.ok) {
     history.replaceState({}, '', '/');
     setView('landing');
@@ -1352,21 +1391,25 @@ $('enterRoom').addEventListener('click', async () => {
   const nickname = $('prejoinNickname')?.value.trim() || state.nickname || '';
   if (!nickname) return showToast('Escolha seu user primeiro.');
 
-  $('enterRoom').disabled = true;
-  const result = await new Promise((resolve) => socket.emit('join-room', {
-    roomCode: state.room.code,
-    nickname,
-    avatar: state.avatar,
-    avatarScale: state.avatarScale,
-    avatarOffsetX: state.avatarOffsetX,
-    avatarOffsetY: state.avatarOffsetY,
-    password: $('roomPassword').value
-  }, resolve));
-  $('enterRoom').disabled = false;
+  const button = $('enterRoom');
+  setButtonBusy(button, true, 'Entrando...');
+  try {
+    const result = await socketRequest('join-room', {
+      roomCode: state.room.code,
+      nickname,
+      avatar: state.avatar,
+      avatarScale: state.avatarScale,
+      avatarOffsetX: state.avatarOffsetX,
+      avatarOffsetY: state.avatarOffsetY,
+      password: $('roomPassword')?.value || ''
+    }, 10000);
 
-  if (!result?.ok) return showToast(result?.error || 'Não foi possível entrar.');
-  saveIdentity(nickname);
-  enterActiveRoom(result);
+    if (!result?.ok) return showToast(result?.error || 'Não foi possível entrar.');
+    saveIdentity(nickname);
+    enterActiveRoom(result);
+  } finally {
+    setButtonBusy(button, false, '', state.room?.isOpen === false ? 'Sala fechada' : 'Entrar na sala →');
+  }
 });
 
 $('backHome').addEventListener('click', () => {
@@ -3080,7 +3123,7 @@ function renderPublicRooms(rooms) {
 }
 
 async function loadPublicRooms() {
-  const result = await new Promise((resolve) => socket.emit('list-public-rooms', resolve));
+  const result = await socketRequest('list-public-rooms', {}, 5000);
   if (result?.ok) renderPublicRooms(result.rooms || []);
 }
 
@@ -3131,7 +3174,7 @@ function renderPublicFeedbacks(items = []) {
 
 async function loadPublicFeedbacks() {
   try {
-    const result = await new Promise((resolve) => socket.emit('list-public-feedback', resolve));
+    const result = await socketRequest('list-public-feedback', {}, 5000);
     if (result?.ok) renderPublicFeedbacks(result.feedbacks || []);
   } catch {}
 }
@@ -3288,7 +3331,8 @@ $('adminPanelModal')?.addEventListener('click', (event) => { if (event.target.da
 document.querySelectorAll('.admin-tab').forEach((button) => button.addEventListener('click', () => setAdminTab(button.dataset.adminTab)));
 
 async function initApp() {
-  $('year').textContent = new Date().getFullYear();
+  setView('landing');
+  if ($('year')) $('year').textContent = new Date().getFullYear();
   if ($('authRemember')) $('authRemember').checked = localStorage.getItem('lnz_remember_login') === '1';
   updateAudioControl();
   updateMixerUI();
@@ -3299,7 +3343,7 @@ async function initApp() {
   initHalloweenLaugh();
   await checkAppVersion();
   await loadAccount();
-  await loadPublicRooms();
+  try { await loadPublicRooms(); } catch {}
   await routeFromLocation();
 }
 
@@ -3382,3 +3426,11 @@ function initHalloweenLaugh() {
   window.addEventListener('pointerdown', onFirstInteraction, true);
   window.addEventListener('keydown', onFirstInteraction, true);
 }
+
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[LNZ] Erro não tratado:', event.reason);
+});
+window.addEventListener('error', (event) => {
+  console.error('[LNZ] Erro de interface:', event.error || event.message);
+});

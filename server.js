@@ -10,18 +10,28 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: true, credentials: true },
-  maxHttpBufferSize: 24e6
+  maxHttpBufferSize: 24e6,
+  pingTimeout: 30000,
+  pingInterval: 25000
 });
 
-const PORT = Number(process.env.PORT) || 3000;
+const parsedPort = Number.parseInt(String(process.env.PORT || '10000'), 10);
+const PORT = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 10000;
+const HOST = '0.0.0.0';
 const rooms = new Map();
+
+console.log('[Render] Inicializando servidor Node...');
+process.on('unhandledRejection', (reason) => console.error('[Servidor] unhandledRejection:', reason));
+process.on('uncaughtException', (error) => console.error('[Servidor] uncaughtException:', error));
 
 app.use(express.json({ limit: '24mb' }));
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const dbPool = DATABASE_URL ? new Pool({
   connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  connectionTimeoutMillis: 5000,
+  idleTimeoutMillis: 30000
 }) : null;
 let databaseReady = false;
 const memoryUsers = new Map();
@@ -773,7 +783,18 @@ app.post('/api/friends/remove', async (req,res) => {
 
 app.disable('x-powered-by');
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), { maxAge: '1d', etag: true }));
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '5m', etag: true }));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  maxAge: 0,
+  setHeaders(res, filePath) {
+    if (/\.(?:html|js|css)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    }
+  }
+}));
+
+app.get('/healthz', (_req, res) => res.status(200).send('ok'));
+app.get('/ready', (_req, res) => res.status(200).json({ ok: true, database: databaseReady ? 'postgres' : 'memory' }));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, rooms: rooms.size, feedbacks: feedbackItems.length, database: databaseReady ? 'postgres' : 'memory' });
@@ -1631,9 +1652,26 @@ io.on('connection', async (socket) => {
   });
 });
 
-initDatabase().finally(() => {
-  logActivity({ action: 'system.start', details: { version: APP_VERSION, database: databaseReady ? 'postgres' : 'memory' } }).catch(() => {});
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`LNZ Transmissão online em http://localhost:${PORT}`);
-  });
+// Sobe o HTTP imediatamente. No Render isso evita 502 durante o boot
+// caso o PostgreSQL externo esteja lento, dormindo ou temporariamente indisponível.
+server.keepAliveTimeout = 120000;
+server.headersTimeout = 120000;
+server.requestTimeout = 120000;
+
+server.on('error', (error) => {
+  console.error('[Servidor] Erro HTTP:', error?.message || error);
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`[Render] LNZ Transmissão ONLINE em http://${HOST}:${PORT}`);
+  console.log(`[Render] PORT=${process.env.PORT || '(não definido; usando 10000)'}`);
+
+  // Banco inicializa em segundo plano. O site continua funcional em memória
+  // enquanto a conexão persistente não estiver pronta.
+  initDatabase()
+    .then(() => logActivity({
+      action: 'system.start',
+      details: { version: APP_VERSION, database: databaseReady ? 'postgres' : 'memory' }
+    }).catch(() => {}))
+    .catch((error) => console.error('[Banco] Inicialização em segundo plano falhou:', error?.message || error));
 });
