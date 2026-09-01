@@ -364,3 +364,22 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - Google Fonts removido; usa fontes do próprio sistema.
 - Cache leve de arquivos estáticos no servidor.
 - Funções de transmissão, call, câmera, câmera frontal/traseira, chat, mixer e modo foco preservadas.
+
+
+## Visual simples e moderno
+
+- Removida a aparência de serviço VIP/premium.
+- Painéis mais planos e fáceis de entender.
+- Gradientes e brilhos reduzidos.
+- Blur pesado removido para melhorar desempenho.
+- Botões principais usam uma cor simples.
+- Textos da página inicial ficaram mais naturais.
+- Halloween continua como tema, mas de forma discreta.
+
+
+## Fundo fixo da marca
+
+- Halloween removido da interface.
+- Fantasmas e lua removidos.
+- O fundo agora usa sempre a imagem da marca enviada pelo usuário.
+- O mesmo fundo aparece no início, na sala e nas áreas do aplicativo.

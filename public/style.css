@@ -1926,3 +1926,465 @@ footer{position:relative;z-index:2;color:#5f5b66!important}
  .chat-panel{top:58px!important;width:100%!important;max-width:none!important;background:rgba(8,8,12,.98)!important}.audio-mixer-panel{left:8px!important;right:8px!important;bottom:84px!important;width:auto!important;max-height:65dvh!important;padding:16px!important}.mixer-range-row input[type="range"]{height:44px!important}.camera-dock{left:8px!important;right:8px!important;bottom:84px!important;max-height:45dvh!important}.camera-grid{grid-template-columns:1fr 1fr!important;gap:7px!important}.camera-card{border-radius:12px!important}.focus-exit-control{top:10px!important;right:10px!important;min-height:42px!important}
 }
 @media(max-width:430px){.camera-grid{grid-template-columns:1fr!important}.hero-actions{grid-template-columns:1fr!important}.hero-actions .hero-main-btn{grid-column:auto!important}}
+
+
+/* ============================================================
+   LNZ — SIMPLES, MODERNO E ABERTO
+   Sem aparência VIP/exclusiva. Menos efeitos, mais clareza.
+   ============================================================ */
+
+:root {
+  --simple-bg: #0b0b0f;
+  --simple-panel: #15151b;
+  --simple-panel-soft: #1b1b22;
+  --simple-line: rgba(255,255,255,.08);
+  --simple-text: #f3f3f5;
+  --simple-muted: #9b9ba6;
+  --simple-purple: #7c4dff;
+  --simple-purple-hover: #8b60ff;
+  --simple-orange: #e8762b;
+  --simple-radius: 14px;
+}
+
+/* Mais leve: sem blur pesado */
+.glass-card,
+.entry-card,
+.room-topbar,
+.room-sidebar,
+.chat-panel,
+.modal-card,
+.audio-mixer-panel,
+.camera-dock,
+.room-controls,
+.focus-exit-control {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Fundo continua temático, mas sem cobrir tudo */
+.background-art::before {
+  background: rgba(5,5,8,.58) !important;
+}
+
+/* Fantasmas discretos, só no início */
+body[data-view="landing"] .seasonal-decor span {
+  opacity: .055 !important;
+  filter: none !important;
+}
+body[data-view="landing"] .seasonal-decor span:nth-child(n+3) {
+  display: none !important;
+}
+
+/* ---------- INÍCIO ---------- */
+.landing-view {
+  padding: 0 24px 34px !important;
+}
+
+.landing-shell {
+  width: min(1120px,100%) !important;
+  min-height: 74vh !important;
+  grid-template-columns: minmax(0,1fr) 390px !important;
+  gap: 52px !important;
+  padding: 54px 0 30px !important;
+}
+
+.mini-brand {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  margin-bottom: 22px !important;
+}
+
+.mini-brand > img {
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 10px !important;
+}
+
+.mini-brand strong {
+  font-size: 13px !important;
+  letter-spacing: .08em !important;
+}
+
+.mini-brand b {
+  color: var(--simple-muted) !important;
+}
+
+.hero-copy h1 {
+  max-width: 690px !important;
+  font-size: clamp(46px,5.7vw,76px) !important;
+  line-height: 1.01 !important;
+  letter-spacing: -.045em !important;
+  margin-bottom: 20px !important;
+  font-weight: 780 !important;
+}
+
+.hero-copy h1 em {
+  color: #d9cdff !important;
+}
+
+.hero-copy > p {
+  max-width: 570px !important;
+  color: #b3b3bc !important;
+  font-size: 16px !important;
+  line-height: 1.58 !important;
+}
+
+.benefits {
+  gap: 8px !important;
+}
+.benefits > div {
+  background: rgba(15,15,20,.80) !important;
+  border: 1px solid var(--simple-line) !important;
+  border-radius: 10px !important;
+  padding: 8px 11px !important;
+  color: #c9c9cf !important;
+}
+.benefits i {
+  color: #bda8ff !important;
+}
+
+.hero-actions .btn {
+  border-radius: 10px !important;
+  min-height: 44px !important;
+  box-shadow: none !important;
+}
+
+.hero-main-btn,
+.entry-card .btn-primary,
+.chat-send,
+.room-controls #shareControl {
+  background: var(--simple-purple) !important;
+  border: 1px solid transparent !important;
+  box-shadow: none !important;
+}
+
+.hero-main-btn:hover,
+.entry-card .btn-primary:hover,
+.chat-send:hover,
+.room-controls #shareControl:hover {
+  background: var(--simple-purple-hover) !important;
+}
+
+.hero-discord-btn {
+  background: rgba(18,18,23,.88) !important;
+  border: 1px solid var(--simple-line) !important;
+}
+
+.entry-card {
+  padding: 24px !important;
+  border-radius: 16px !important;
+  background: rgba(17,17,23,.94) !important;
+  border: 1px solid var(--simple-line) !important;
+  box-shadow: 0 14px 36px rgba(0,0,0,.28) !important;
+}
+
+.entry-kicker {
+  color: #aaa7b2 !important;
+  font-size: 9px !important;
+}
+
+.entry-card h2 {
+  font-size: 22px !important;
+}
+
+.entry-card > p {
+  color: var(--simple-muted) !important;
+}
+
+.field input,
+.join-code-row input,
+.field textarea {
+  background: #0f0f14 !important;
+  border: 1px solid var(--simple-line) !important;
+  border-radius: 10px !important;
+}
+
+.field input:focus,
+.join-code-row input:focus,
+.field textarea:focus {
+  border-color: rgba(124,77,255,.7) !important;
+  box-shadow: 0 0 0 2px rgba(124,77,255,.12) !important;
+}
+
+.avatar-button {
+  background: #20202a !important;
+  border: 1px solid var(--simple-line) !important;
+}
+
+.trust-line {
+  color: #777783 !important;
+}
+
+.public-section {
+  width: min(1120px,100%) !important;
+}
+.public-card,
+.empty-public {
+  background: rgba(17,17,23,.92) !important;
+  border: 1px solid var(--simple-line) !important;
+  border-radius: 12px !important;
+}
+
+/* ---------- SALA ---------- */
+.room-view {
+  grid-template-columns: 220px minmax(0,1fr) 310px !important;
+  grid-template-rows: 60px minmax(0,1fr) !important;
+  background: rgba(6,6,9,.68) !important;
+}
+
+.room-topbar,
+.room-sidebar,
+.chat-panel {
+  background: #111116 !important;
+  border-color: var(--simple-line) !important;
+}
+
+.room-topbar {
+  min-height: 60px !important;
+}
+
+.room-sidebar {
+  padding: 12px !important;
+}
+
+.invite-card {
+  background: #18181e !important;
+  border: 1px solid var(--simple-line) !important;
+  border-radius: 12px !important;
+}
+
+.discord-channel {
+  border-radius: 8px !important;
+}
+.discord-channel.active {
+  background: #202027 !important;
+}
+
+.room-stage {
+  min-height: calc(100dvh - 60px) !important;
+  background:
+    linear-gradient(rgba(8,8,11,.66),rgba(8,8,11,.72)),
+    url('/assets/halloween-background.webp') center/cover no-repeat fixed !important;
+}
+
+.screen-icon {
+  background: #1d192a !important;
+  border: 1px solid rgba(124,77,255,.25) !important;
+  color: #bda8ff !important;
+  border-radius: 14px !important;
+}
+
+.empty-stage h2 {
+  font-size: 20px !important;
+}
+.empty-stage p {
+  color: var(--simple-muted) !important;
+}
+
+.stream-card {
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+
+.chat-compose {
+  background: #0e0e13 !important;
+  border-radius: 10px !important;
+}
+
+.room-controls {
+  border-radius: 13px !important;
+  background: #15151b !important;
+  box-shadow: 0 12px 30px rgba(0,0,0,.34) !important;
+}
+
+.room-controls button {
+  border-radius: 9px !important;
+  background: #202027 !important;
+  color: #dddde2 !important;
+}
+
+.room-controls button.camera-on,
+.room-controls button.call-active,
+.room-controls button.mic-active {
+  background: #183127 !important;
+  color: #9ce0bf !important;
+}
+
+/* ---------- MODAIS ---------- */
+.modal-card {
+  background: #15151b !important;
+  border: 1px solid var(--simple-line) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 18px 50px rgba(0,0,0,.38) !important;
+}
+
+.visibility-option,
+.feedback-type {
+  background: #1d1d24 !important;
+  border-radius: 10px !important;
+}
+
+.visibility-option.active,
+.feedback-type.active {
+  background: #211b35 !important;
+  border-color: rgba(124,77,255,.48) !important;
+}
+
+/* ---------- MOBILE ---------- */
+@media(max-width:760px) {
+  .landing-view {
+    padding: 0 14px 24px !important;
+  }
+
+  .landing-shell {
+    padding: 24px 0 16px !important;
+    gap: 20px !important;
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(39px,11vw,54px) !important;
+    line-height: 1 !important;
+  }
+
+  .hero-copy > p {
+    font-size: 14px !important;
+  }
+
+  .benefits {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .benefits > div {
+    border-radius: 9px !important;
+  }
+
+  .entry-card {
+    padding: 18px !important;
+    border-radius: 14px !important;
+  }
+
+  .room-topbar {
+    height: 56px !important;
+    min-height: 56px !important;
+  }
+
+  .room-stage {
+    inset: 56px 0 0 !important;
+  }
+
+  .room-sidebar,
+  .chat-panel {
+    top: 56px !important;
+  }
+
+  .room-controls {
+    left: 7px !important;
+    right: 7px !important;
+    min-height: 60px !important;
+    padding: 6px !important;
+    border-radius: 13px !important;
+  }
+
+  .room-controls button {
+    min-width: 98px !important;
+    min-height: 46px !important;
+    font-size: 10.5px !important;
+  }
+
+  .room-controls #shareControl {
+    min-width: 125px !important;
+  }
+}
+
+
+/* ============================================================
+   FUNDO FIXO DA MARCA
+   - remove visual Halloween
+   - remove fantasmas/lua
+   - mantém sempre o fundo da marca em todas as telas
+   ============================================================ */
+
+/* remove fantasmas e decoração sazonal */
+.seasonal-decor,
+.seasonal-decor span,
+.seasonal-decor::before,
+.seasonal-decor::after {
+  display: none !important;
+  content: none !important;
+}
+
+/* fundo principal da marca em tudo */
+.background-art,
+html[data-season-theme="halloween"] .background-art,
+html[data-season-theme="default"] .background-art {
+  background:
+    linear-gradient(90deg, rgba(4,4,8,.52) 0%, rgba(8,6,13,.34) 48%, rgba(4,4,8,.52) 100%),
+    linear-gradient(to bottom, rgba(0,0,0,.14), rgba(0,0,0,.30)),
+    url('/assets/brand-background.png') center center / cover no-repeat fixed !important;
+  filter: saturate(1.02) contrast(1.02) brightness(1.01) !important;
+  opacity: 1 !important;
+}
+
+.background-art::before,
+.background-art::after,
+html[data-season-theme="halloween"] .background-art::before,
+html[data-season-theme="halloween"] .background-art::after,
+html[data-season-theme="default"] .background-art::before,
+html[data-season-theme="default"] .background-art::after {
+  display: none !important;
+  content: none !important;
+}
+
+/* mesmas telas usando o fundo da marca */
+.landing-view,
+.prejoin-view,
+.room-view {
+  background: transparent !important;
+}
+
+/* sala com o mesmo fundo da marca */
+.room-stage {
+  background:
+    linear-gradient(rgba(7,7,10,.60), rgba(7,7,10,.68)),
+    url('/assets/brand-background.png') center center / cover no-repeat fixed !important;
+}
+
+/* painéis mais discretos em cima do fundo */
+.entry-card,
+.public-card,
+.empty-public,
+.room-topbar,
+.room-sidebar,
+.chat-panel,
+.invite-card,
+.room-controls,
+.modal-card,
+.audio-mixer-panel,
+.camera-dock {
+  background: rgba(14,14,19,.88) !important;
+}
+
+/* mantém a sala limpa */
+.room-view .discord-rail,
+.room-view .seasonal-decor {
+  display: none !important;
+}
+
+/* footer e áreas vazias sem fantasmas */
+.site-footer::before,
+.site-footer::after,
+.empty-stage::before,
+.empty-stage::after {
+  display: none !important;
+  content: none !important;
+}
+
+@media (max-width: 760px) {
+  .background-art,
+  .room-stage {
+    background-position: center center !important;
+  }
+}
