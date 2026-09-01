@@ -3125,3 +3125,57 @@ body[data-view="landing"] #landingView {
     filter: saturate(1.18) contrast(1.04) brightness(1.08) !important;
   }
 }
+
+
+/* ============================================================
+   ESTABILIDADE DE INTERAÇÃO — camada final
+   ============================================================ */
+.background-art,
+.background-art::before,
+.background-art::after,
+.seasonal-decor,
+.seasonal-decor * {
+  pointer-events: none !important;
+}
+
+#landingView,
+#prejoinView,
+#roomView {
+  position: relative !important;
+  z-index: 5 !important;
+}
+
+body[data-view="landing"] #landingView { display: block !important; }
+body[data-view="landing"] #prejoinView,
+body[data-view="landing"] #roomView { display: none !important; }
+
+body[data-view="prejoin"] #prejoinView { display: flex !important; }
+body[data-view="prejoin"] #landingView,
+body[data-view="prejoin"] #roomView { display: none !important; }
+
+body[data-view="room"] #roomView { display: grid !important; }
+body[data-view="room"] #landingView,
+body[data-view="room"] #prejoinView { display: none !important; }
+
+button,
+a,
+input,
+textarea,
+select,
+.entry-card,
+.hero-actions,
+.room-controls,
+.room-sidebar,
+.chat-panel,
+.modal-card {
+  pointer-events: auto !important;
+}
+
+button:disabled {
+  cursor: wait !important;
+  opacity: .68 !important;
+}
+
+@media (max-width:760px) {
+  body[data-view="room"] #roomView { display: block !important; }
+}

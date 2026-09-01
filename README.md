@@ -409,3 +409,14 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - Responsivo para celular.
 - Tela inicial e sala continuam separadas.
 - Fundo otimizado para WebP para reduzir carregamento.
+
+
+## Correção urgente de estabilidade
+
+- HTML, CSS e JavaScript agora são servidos sem cache antigo.
+- URLs de CSS/JS possuem versão para forçar atualização no navegador.
+- Criação e entrada de sala têm timeout e não deixam botões travados.
+- Tela inicial aparece imediatamente, mesmo enquanto o Render acorda.
+- Elementos de fundo não podem bloquear cliques.
+- Telas landing/prejoin/room ficam estritamente separadas.
+- Socket.IO recebeu tolerância maior para redes móveis.

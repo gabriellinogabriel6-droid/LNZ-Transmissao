@@ -10,7 +10,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: true, credentials: true },
-  maxHttpBufferSize: 24e6
+  maxHttpBufferSize: 24e6,
+  pingTimeout: 30000,
+  pingInterval: 25000
 });
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -773,7 +775,15 @@ app.post('/api/friends/remove', async (req,res) => {
 
 app.disable('x-powered-by');
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), { maxAge: '1d', etag: true }));
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '5m', etag: true }));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  maxAge: 0,
+  setHeaders(res, filePath) {
+    if (/\.(?:html|js|css)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    }
+  }
+}));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, rooms: rooms.size, feedbacks: feedbackItems.length, database: databaseReady ? 'postgres' : 'memory' });
