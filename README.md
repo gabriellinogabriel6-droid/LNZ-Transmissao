@@ -120,3 +120,16 @@ O botão do Discord está configurado para:
 - Limite de 2 MB por arquivo.
 - Executáveis e scripts perigosos são bloqueados.
 - O histórico fica somente enquanto a sala existir no servidor.
+
+
+## Ajuste avançado de foto
+
+O editor de avatar agora permite:
+
+- aumentar ou recuar a foto;
+- mover a foto para cima ou para baixo;
+- usar botões rápidos **Subir**, **Centralizar** e **Descer**;
+- arrastar a própria foto no círculo com mouse ou toque;
+- salvar a posição para que o mesmo enquadramento apareça na sala e no chat.
+
+Esta versão também mantém o modo anti-retorno com a transmissão de tela sem áudio.

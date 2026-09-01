@@ -102,7 +102,7 @@ button { color: inherit; }
   font-weight: 700;
 }
 .avatar-button { width: 54px; height: 54px; border-radius: 50%; cursor: pointer; box-shadow: 0 10px 24px rgba(0,0,0,.28), 0 0 0 1px rgba(255,255,255,.08); }
-.avatar-button img, .participant-avatar img, .mini-avatar img, .avatar-editor-preview img { width: 100%; height: 100%; object-fit: contain; padding: 4px; background: radial-gradient(circle at 50% 45%, rgba(30, 12, 55, .96), rgba(8, 5, 16, .98)); transform: scale(var(--avatar-scale, 1)); transform-origin: center; }
+.avatar-button img, .participant-avatar img, .mini-avatar img, .avatar-editor-preview img { width: 100%; height: 100%; object-fit: contain; padding: 4px; background: radial-gradient(circle at 50% 45%, rgba(30, 12, 55, .96), rgba(8, 5, 16, .98)); transform: translateY(calc(var(--avatar-y, 0) * 1%)) scale(var(--avatar-scale, 1)); transform-origin: center; }
 .avatar-button::after { content: "✎"; position: absolute; right: -2px; bottom: -2px; width: 17px; height: 17px; border-radius: 50%; display: grid; place-items: center; font-size: 9px; background: var(--accent); color: white; border: 2px solid #23113f; }
 .avatar-large { width: 68px; height: 68px; margin: 18px auto 10px; font-size: 19px; }
 .avatar-name { text-align: center; color: #8fa5a8; margin-bottom: 10px; }
@@ -362,6 +362,12 @@ input[type="range"]::-moz-range-thumb {
   font-weight: 700;
   font-size: 28px;
 }
+
+.avatar-position-field { margin-top: 18px; }
+.avatar-position-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.avatar-position-buttons .btn { min-width: 0; padding: 0 10px; }
+.avatar-editor-preview { cursor: grab; touch-action: none; user-select: none; }
+.avatar-editor-preview.dragging { cursor: grabbing; box-shadow: 0 0 0 2px rgba(154, 92, 255, .4), 0 16px 40px rgba(0,0,0,.32); }
 .avatar-editor-preview img.hidden + span, .avatar-button img.hidden + span { display: block; }
 .avatar-editor-preview img:not(.hidden) + span, .avatar-button img:not(.hidden) + span { display: none; }
 .avatar-editor-buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
@@ -433,3 +439,5 @@ input[type="range"]::-moz-range-thumb {
 .footer-link { margin-left: 10px; }
 .entry-card .btn-primary.btn-wide { margin-top: 18px; min-height: 46px; font-size: 14px; }
 .join-code-row .btn-soft { min-height: 44px; font-weight: 800; }
+
+@media (max-width: 480px) { .avatar-position-buttons { grid-template-columns: 1fr; } }

@@ -167,7 +167,7 @@
           <span id="sharingLabel">Transmitindo agora</span>
           <span class="live-badge">AO VIVO</span>
         </div>
-        <video id="stageVideo" autoplay playsinline></video>
+        <video id="stageVideo" autoplay playsinline muted></video>
         <div id="videoConnecting" class="video-connecting hidden"><div class="spinner"></div><span>Conectando transmissão...</span></div>
       </div>
 
@@ -266,9 +266,20 @@
       </div>
 
       <div class="field">
-        <div class="label-line"><label for="avatarZoom">TAMANHO DA FOTO</label><small id="avatarZoomValue">100%</small></div>
+        <div class="label-line"><label for="avatarZoom">TAMANHO DA FOTO</label><small id="avatarZoomValue">135%</small></div>
         <input id="avatarZoom" type="range" min="0.5" max="3" step="0.05" value="1.35" />
-        <small class="helper">Arraste para aproximar ou recuar a foto dentro do círculo.</small>
+        <small class="helper">Aumente ou recue a foto dentro do círculo.</small>
+      </div>
+
+      <div class="field avatar-position-field">
+        <div class="label-line"><label for="avatarPositionY">POSIÇÃO VERTICAL</label><small id="avatarPositionYValue">Centro</small></div>
+        <input id="avatarPositionY" type="range" min="-60" max="60" step="1" value="0" />
+        <div class="avatar-position-buttons">
+          <button id="avatarMoveUp" class="btn btn-outline small-btn" type="button">↑ Subir</button>
+          <button id="avatarCenterY" class="btn btn-outline small-btn" type="button">Centralizar</button>
+          <button id="avatarMoveDown" class="btn btn-outline small-btn" type="button">↓ Descer</button>
+        </div>
+        <small class="helper">Você também pode arrastar a foto diretamente no círculo para cima ou para baixo.</small>
       </div>
 
       <div class="avatar-editor-buttons">
