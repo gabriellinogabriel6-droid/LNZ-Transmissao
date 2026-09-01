@@ -6,12 +6,15 @@
   <meta name="theme-color" content="#08090d" />
   <meta name="description" content="LNZ Transmissão - salas públicas e privadas para compartilhar sua tela." />
   <title>LNZ Transmissão</title>
-  <link rel="icon" href="/assets/logo.webp" />
-  <link rel="stylesheet" href="/style.css?v=stable-0901-1" />
+  <link rel="icon" href="/assets/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <div class="background-art"></div>
-  <div id="seasonalDecor" class="seasonal-decor" aria-hidden="true"><span>👻</span><span>👻</span><span>👻</span></div>
+  <div class="noise"></div>
 
   <div id="updateBanner" class="update-banner hidden" role="status">
     <div>
@@ -24,30 +27,27 @@
   <main id="landingView" class="landing-view">
     <section class="landing-shell">
       <div class="hero-copy">
-        <div class="mini-brand"><img src="/assets/logo.webp" alt=""><div><strong>LNZ TRANSMISSÃO</strong><b>salas ao vivo • direto no navegador</b></div></div>
-          <img id="landingMainLogo" class="landing-main-logo" src="/assets/logo.webp" alt="Logo LNZ Linozera" />
-        <h1>Compartilhe sua tela.<br><em>Conecte sua sala.</em></h1>
-        <p>Crie uma sala em segundos, envie o link e compartilhe sua tela com quem quiser. Sem conta, sem senha e direto no navegador.</p>
+        <div class="mini-brand"><span></span>LNZ TRANSMISSÃO <b>ponto a ponto</b></div>
+        <h1>Sua tela, ao vivo,<br><em>direto para a sala.</em></h1>
+        <p>Crie uma sala em um clique, compartilhe o código e transmita a tela pelo navegador. Sem instalar nada.</p>
 
         <div class="benefits">
-          <div><i>⚡</i><span>Rápido para entrar</span></div>
-          <div><i>◈</i><span>Sala pública ou privada</span></div>
-          <div><i>⌁</i><span>Tela, voz, câmera e chat</span></div>
+          <div><i>⚡</i><span>Sala instantânea, por código ou link</span></div>
+          <div><i>◈</i><span>Escolha entre sala pública ou privada</span></div>
+          <div><i>⌁</i><span>Compartilhamento WebRTC com baixa latência</span></div>
         </div>
 
         <div class="hero-actions">
-          <button id="heroCreateRoom" class="btn btn-primary hero-main-btn">＋ Criar nova sala</button>
+          <button id="heroCreateRoom" class="btn btn-primary hero-main-btn">Criar sala agora</button>
           <a id="discordButton" class="btn btn-outline hero-discord-btn hidden" href="#" target="_blank" rel="noopener noreferrer">Entrar no Discord</a>
-          <button id="heroFeedbacks" class="btn btn-outline hero-discord-btn" type="button">Feedbacks</button>
-          <button id="heroSendFeedback" class="btn btn-outline hero-discord-btn" type="button">Enviar feedback</button>
-          <button id="adminPanelButton" class="btn btn-outline hero-discord-btn admin-only hidden" type="button">🛡 Painel Admin</button>
+          <button id="heroFeedbacks" class="btn btn-outline hero-discord-btn" type="button">💬 Ver feedbacks</button>
+          <button id="heroSendFeedback" class="btn btn-outline hero-discord-btn" type="button">💜 Enviar feedback</button>
         </div>
       </div>
 
       <div class="entry-card glass-card">
-        <div class="entry-kicker">ENTRAR</div>
-        <h2>Escolha seu nome</h2>
-        <p>Esse nome será mostrado dentro da sala.</p>
+        <h2>Entrar</h2>
+        <p>Escolha um nickname para ser identificado na sala.</p>
 
         <div class="profile-row">
           <button id="landingAvatarButton" class="avatar-button" type="button" title="Escolher avatar">
@@ -60,13 +60,17 @@
           </div>
         </div>
 
-        <input id="avatarInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+        <input id="avatarInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
         <div class="avatar-actions">
-          <button id="adjustAvatarLanding" class="btn btn-outline small-btn" type="button">✦ Ajustar foto/GIF</button>
+          <button id="adjustAvatarLanding" class="btn btn-outline small-btn" type="button">✦ Ajustar foto</button>
           <button id="removeAvatarLanding" class="btn btn-outline small-btn" type="button">Remover foto</button>
         </div>
-        <small class="gif-avatar-hint">Opcional • foto ou GIF de até 10 MB</small>
-        <button id="openCreateRoom" class="btn btn-primary btn-wide">Criar sala</button><div class="trust-line">Sem conta e sem senha</div>
+        <button id="accountButton" class="btn btn-outline btn-wide account-entry-btn" type="button">👤 Entrar / Criar conta</button>
+        <div id="accountSignedIn" class="account-signed-in hidden">
+          <span>Conectado como <b id="accountUsernameLabel">—</b></span>
+          <button id="accountLogoutQuick" type="button">Sair</button>
+        </div>
+        <button id="openCreateRoom" class="btn btn-primary btn-wide">＋ Criar sala</button>
 
         <div class="divider"><span>OU</span></div>
 
@@ -81,8 +85,8 @@
     <section class="public-section">
       <div class="section-heading">
         <div>
-          <span>SALAS ABERTAS</span>
-          <h3>Salas disponíveis agora</h3>
+          <span>SALAS PÚBLICAS</span>
+          <h3>Entre em uma sala aberta</h3>
         </div>
         <button id="refreshRooms" class="icon-btn" title="Atualizar">↻</button>
       </div>
@@ -96,7 +100,7 @@
   <main id="prejoinView" class="prejoin-view hidden">
     <div class="prejoin-card glass-card">
       <a class="prejoin-brand" href="/">
-        <img src="/assets/logo.webp" alt="LNZ" />
+        <img src="/assets/logo.png" alt="LNZ" />
         <strong>LNZ TRANSMISSÃO</strong>
       </a>
       <h2>Antes de entrar</h2>
@@ -110,8 +114,8 @@
       </button>
       <div id="prejoinAvatarName" class="avatar-name">Sem nickname</div>
       <div class="avatar-actions center-actions">
-        <button id="chooseAvatarPrejoin" class="btn btn-outline small-btn">✎ Foto ou GIF</button>
-        <button id="adjustAvatarPrejoin" class="btn btn-outline small-btn" type="button">✦ Ajustar foto/GIF</button>
+        <button id="chooseAvatarPrejoin" class="btn btn-outline small-btn">✎ Escolher avatar</button>
+        <button id="adjustAvatarPrejoin" class="btn btn-outline small-btn" type="button">✦ Ajustar foto</button>
       </div>
 
       <div class="field prejoin-field">
@@ -131,15 +135,12 @@
   </main>
 
   <main id="roomView" class="room-view hidden">
-
     <header class="room-topbar">
-      <button id="mobileMenuControl" class="mobile-menu-control" type="button" title="Abrir menu">☰</button>
       <div class="room-brand">
-        <img src="/assets/logo.webp" alt="LNZ" />
+        <img src="/assets/logo.png" alt="LNZ" />
         <strong>LNZ</strong>
         <span class="top-separator"></span>
         <button id="topRoomCode" class="code-pill code-button" title="Copiar código">----</button>
-        <span class="discord-channel-title">Sala ao vivo</span>
       </div>
       <div class="room-status">
         <a id="roomDiscordLink" class="top-discord-link hidden" href="#" target="_blank" rel="noopener noreferrer">Discord</a>
@@ -154,18 +155,11 @@
         <span>CÓDIGO DA SALA</span>
         <div class="invite-code-line"><strong id="sidebarRoomCode">----</strong><button id="copyCode" title="Copiar código">⧉</button></div>
         <div id="sidebarPrivacy" class="privacy-line"></div>
-        <button id="copyInvite" class="btn btn-outline btn-wide">Copiar convite</button>
+        <button id="copyInvite" class="btn btn-outline btn-wide">🔗 Copiar link do convite</button>
         <button id="toggleRoomAccess" class="btn btn-room-access btn-wide hidden" type="button">🔒 Fechar sala</button>
       </div>
 
-      <div class="discord-channel-list">
-        <span class="discord-channel-section">CANAIS</span>
-        <button id="channelStream" class="discord-channel active" type="button"><span>#</span> transmissão</button>
-        <button id="channelChat" class="discord-channel" type="button"><span>#</span> chat</button>
-        <button id="channelCall" class="discord-channel" type="button"><span>🔊</span> call de voz</button>
-      </div>
-
-      <div class="participants-heading">MEMBROS — <span id="participantCount">0</span></div>
+      <div class="participants-heading">NA SALA — <span id="participantCount">0</span></div>
       <div id="participantsList" class="participants-list"></div>
 
       <div class="sidebar-me">
@@ -180,32 +174,30 @@
         <h2>Ninguém está compartilhando ainda</h2>
         <p>Assim que alguém iniciar, a transmissão aparece aqui em destaque.</p>
         <div class="stage-actions">
-          <button id="shareFromEmpty" class="btn btn-primary">Compartilhar tela</button>
+          <button id="shareFromEmpty" class="btn btn-primary">▣ Compartilhar tela</button>
           <button id="copyInviteCenter" class="btn btn-outline">🔗 Copiar link</button>
         </div>
       </div>
 
       <div id="videoStage" class="video-stage hidden">
         <div class="video-topline">
-          <span id="sharingLabel">Transmissões ao vivo</span>
-          <span id="sharingCountLabel" class="live-badge">0 AO VIVO</span>
+          <span id="sharingLabel">Transmitindo agora</span>
+          <span class="live-badge">AO VIVO</span>
         </div>
-        <div id="streamsGrid" class="streams-grid"></div>
+        <video id="stageVideo" autoplay playsinline muted></video>
+        <div id="videoConnecting" class="video-connecting hidden"><div class="spinner"></div><span>Conectando transmissão...</span></div>
       </div>
 
       <div class="room-controls">
-        <button id="shareControl" class="btn btn-primary control-main">Compartilhar tela</button>
+        <button id="shareControl" class="btn btn-primary control-main">▣ Compartilhar tela</button>
         <span></span>
-        <button id="voiceCallControl" class="control-voice" type="button" title="Entrar na call de voz">Entrar na call</button>
+        <button id="voiceCallControl" class="control-voice" type="button" title="Entrar na call de voz">📞 Entrar na call</button>
         <button id="micControl" class="control-voice mic-control" type="button" title="Ligar/desligar microfone" disabled>🎙 Mic ON</button>
-        <button id="cameraControl" class="control-voice camera-control" type="button" title="Ligar/desligar câmera" disabled>📹 Câmera OFF</button>
-        <button id="cameraFlipControl" class="control-voice camera-flip-control" type="button" title="Trocar câmera frontal/traseira" disabled>🔄 Virar câmera</button>
         <span></span>
         <button id="audioControl" class="control-audio" type="button" title="Ativar áudio da aba na próxima transmissão">🔇 Áudio OFF</button>
-        <button id="mixerControl" class="control-audio mixer-open-btn" type="button" title="Mix de volume">Volume</button>
+        <button id="mixerControl" class="control-audio mixer-open-btn" type="button" title="Mix de volume">🎚 Mix</button>
         <span></span>
         <button id="chatControl" class="control-chat" type="button" title="Abrir chat">💬 Chat <b id="chatUnread" class="chat-unread hidden">0</b></button>
-        <button id="focusControl" class="control-focus" type="button" title="Ocultar interface e focar na transmissão">Modo foco</button>
         <span></span>
         <button id="fullscreenControl" class="control-icon" title="Tela cheia">⛶</button>
         <span></span>
@@ -243,18 +235,8 @@
         </div>
       </div>
 
-      <div id="cameraDock" class="camera-dock hidden" aria-label="Câmeras da call">
-        <div class="camera-dock-head">
-          <div><strong>Call de vídeo</strong><span id="cameraCountLabel">0 câmeras</span></div>
-          <button id="toggleCameraDock" type="button" title="Minimizar câmeras">−</button>
-        </div>
-        <div id="cameraGrid" class="camera-grid"></div>
-      </div>
-
       <div id="voiceAudioContainer" class="voice-audio-container" aria-hidden="true"></div>
     </section>
-
-    <button id="focusExitControl" class="focus-exit-control hidden" type="button">Mostrar controles</button>
 
     <aside id="chatPanel" class="chat-panel">
       <div class="chat-head">
@@ -291,26 +273,6 @@
       <div class="chat-hint">Arquivos de até 2 MB • executáveis bloqueados</div>
     </aside>
   </main>
-
-  <div id="participantMenu" class="participant-menu hidden" role="dialog" aria-label="Opções do participante">
-    <div class="participant-menu-head">
-      <div id="participantMenuAvatar" class="participant-menu-avatar">?</div>
-      <div><strong id="participantMenuName">Participante</strong><span id="participantMenuStatus">Conectado</span></div>
-      <button id="closeParticipantMenu" type="button">×</button>
-    </div>
-    <button id="participantViewProfile" class="participant-menu-action" type="button">👤 Ver perfil</button>
-    <div id="participantVolumeWrap" class="participant-volume-wrap">
-      <div class="participant-volume-title"><span>🔊 Volume para mim</span><b id="participantVolumeValue">100%</b></div>
-      <input id="participantVolume" type="range" min="0" max="100" step="1" value="100" />
-    </div>
-    <button id="participantMuteForMe" class="participant-menu-action" type="button">🔇 Silenciar para mim</button>
-    <button id="participantHideCameraForMe" class="participant-menu-action" type="button">📹 Ocultar câmera para mim</button>
-    <div id="participantHostActions" class="participant-host-actions hidden">
-      <span>CONTROLES DO DONO</span>
-      <button id="participantHostMute" class="participant-menu-action danger-soft" type="button">🔇 Silenciar na sala</button>
-      <button id="participantHostKick" class="participant-menu-action danger" type="button">↪ Remover da sala</button>
-    </div>
-  </div>
 
   <div id="createModal" class="modal hidden" aria-hidden="true">
     <div class="modal-backdrop" data-close-modal="true"></div>
@@ -412,225 +374,41 @@
 
   <div id="authModal" class="modal hidden" aria-hidden="true">
     <div class="modal-backdrop" data-close-auth="true"></div>
-    <div class="modal-card glass-card auth-card auth-card-modern">
-      <div class="auth-brandline">
-        <img src="/assets/logo.webp" alt="LNZ" />
-        <div><strong>LNZ</strong><span>Conta segura</span></div>
+    <div class="modal-card glass-card auth-card">
+      <div class="modal-head">
+        <div><span>CONTA LNZ</span><h2 id="authTitle">Entrar na sua conta</h2></div>
         <button id="closeAuth" class="modal-close" type="button">×</button>
       </div>
 
       <div id="authLoggedOut">
-        <div class="auth-welcome">
-          <span id="authEyebrow">BEM-VINDO DE VOLTA</span>
-          <h2 id="authTitle">Entrar na sua conta</h2>
-          <p id="authSubtitle">Entre para acessar suas salas, perfil, amigos e configurações.</p>
+        <div class="auth-tabs">
+          <button id="authLoginTab" class="auth-tab active" type="button">Entrar</button>
+          <button id="authRegisterTab" class="auth-tab" type="button">Criar conta</button>
         </div>
 
-        <button id="authBackToLogin" class="auth-back-link hidden" type="button">← Voltar para entrar</button>
-
-        <div class="field auth-modern-field">
-          <label for="authUsername">USUÁRIO</label>
-          <div class="auth-input-shell"><span>👤</span><input id="authUsername" maxlength="24" autocomplete="username" placeholder="Digite seu usuário" /></div>
-          <small id="authUsernameHelper" class="helper">Use de 3 a 24 caracteres.</small>
-          <small id="authUsernameStatus" class="auth-username-status hidden"></small>
-        </div>
-        <div id="authRecoveryCodeWrap" class="field auth-field-gap hidden">
-          <label for="authRecoveryCode">CÓDIGO DE RECUPERAÇÃO</label>
-          <div class="auth-input-shell"><span>🔑</span><input id="authRecoveryCode" maxlength="40" autocomplete="off" placeholder="LNZ-XXXX-XXXX-XXXX-XXXX-XXXX" /></div>
-          <small class="helper">Digite o código de recuperação da sua conta.</small>
+        <div class="field">
+          <label for="authUsername">LOGIN</label>
+          <input id="authUsername" maxlength="24" autocomplete="username" placeholder="Seu login" />
+          <small class="helper">3 a 24 caracteres: letras, números, ponto, hífen ou _.</small>
         </div>
         <div class="field auth-field-gap">
-          <label id="authPasswordLabel" for="authPassword">SENHA</label>
-          <div class="auth-input-shell"><span>🔒</span><input id="authPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Digite sua senha" /><button id="toggleAuthPassword" class="password-eye" type="button" title="Mostrar senha">◉</button></div>
+          <label for="authPassword">SENHA</label>
+          <input id="authPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Sua senha" />
         </div>
         <div id="authConfirmWrap" class="field auth-field-gap hidden">
           <label for="authPasswordConfirm">CONFIRMAR SENHA</label>
-          <div class="auth-input-shell"><span>✓</span><input id="authPasswordConfirm" type="password" maxlength="72" autocomplete="new-password" placeholder="Digite novamente" /></div>
+          <input id="authPasswordConfirm" type="password" maxlength="72" autocomplete="new-password" placeholder="Digite a senha novamente" />
         </div>
-        <label id="authRememberWrap" class="remember-login-row remember-login-modern">
-          <input id="authRemember" type="checkbox" />
-          <span>
-            <strong>Manter conectado</strong>
-            <small>Continuar conectado neste dispositivo.</small>
-          </span>
-        </label>
         <div id="authError" class="auth-error hidden"></div>
-        <button id="authSubmit" class="btn btn-primary btn-wide auth-main-submit" type="button">Entrar</button>
-
-        <div id="authLoginActions" class="auth-simple-actions">
-          <button id="forgotPasswordButton" class="auth-link-btn" type="button">Esqueci minha senha</button>
-          <span>•</span>
-          <button id="authCreateAccountButton" class="auth-link-btn auth-create-link" type="button">Criar conta</button>
-        </div>
-        <button id="chooseAnotherUsername" class="auth-link-btn choose-another-user hidden" type="button">Escolher outro nome</button>
+        <button id="authSubmit" class="btn btn-primary btn-wide" type="button">Entrar</button>
+        <small id="authDatabaseStatus" class="auth-db-status">Conta protegida por senha criptografada.</small>
       </div>
 
       <div id="authLoggedIn" class="auth-logged-in hidden">
         <div class="auth-user-icon">👤</div>
         <strong id="authLoggedInUsername">—</strong>
         <span>Sua conta está conectada neste navegador.</span>
-        <button id="regenerateRecoveryCode" class="btn btn-outline btn-wide" type="button">🔑 Gerar novo código de recuperação</button>
         <button id="authLogout" class="btn btn-outline btn-wide" type="button">Sair da conta</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="recoveryCodeModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-backdrop"></div>
-    <div class="modal-card glass-card recovery-code-card">
-      <div class="modal-head">
-        <div><span>RECUPERAÇÃO DE CONTA</span><h2>Guarde este código</h2></div>
-      </div>
-      <p>Este código permite trocar sua senha se você esquecer. Ele é mostrado apenas quando é criado ou renovado.</p>
-      <div id="recoveryCodeValue" class="recovery-code-value">LNZ-XXXX-XXXX-XXXX-XXXX-XXXX</div>
-      <div class="recovery-code-actions">
-        <button id="copyRecoveryCode" class="btn btn-outline" type="button">📋 Copiar código</button>
-        <button id="closeRecoveryCode" class="btn btn-primary" type="button">Já salvei</button>
-      </div>
-      <small>Não envie esse código para outras pessoas. Quem tiver o código e souber seu login poderá redefinir sua senha.</small>
-    </div>
-  </div>
-
-
-  <div id="profileModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-backdrop" data-close-profile="true"></div>
-    <div class="modal-card glass-card social-profile-card">
-      <div class="modal-head">
-        <div><span>PERFIL</span><h2>Perfil do usuário</h2></div>
-        <button id="closeProfile" class="modal-close" type="button">×</button>
-      </div>
-      <div class="profile-showcase">
-        <div id="profileAvatar" class="profile-big-avatar"><span>?</span></div>
-        <div class="profile-showcase-info">
-          <div class="profile-title-line"><strong id="profileUsername">—</strong><span id="profileOnline" class="profile-online">offline</span></div>
-          <span id="profileStatus" class="profile-status">Sem status</span>
-          <p id="profileBio">Este usuário ainda não escreveu uma bio.</p>
-        </div>
-      </div>
-      <div class="profile-meta-row">
-        <span>Conta LNZ</span><b id="profileMemberSince">—</b>
-      </div>
-      <div class="profile-actions-row">
-        <button id="profileFriendAction" class="btn btn-primary" type="button">Adicionar amigo</button>
-        <button id="editMyProfile" class="btn btn-outline hidden" type="button">Editar meu perfil</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="editProfileModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-backdrop" data-close-edit-profile="true"></div>
-    <div class="modal-card glass-card social-profile-card">
-      <div class="modal-head">
-        <div><span>SEU PERFIL</span><h2>Personalizar perfil</h2></div>
-        <button id="closeEditProfile" class="modal-close" type="button">×</button>
-      </div>
-      <div class="edit-profile-avatar-row">
-        <div id="editProfileAvatar" class="profile-big-avatar"><span>?</span></div>
-        <div>
-          <button id="editProfileChooseAvatar" class="btn btn-outline small-btn" type="button">Trocar foto / GIF</button>
-          <button id="editProfileAdjustAvatar" class="btn btn-outline small-btn" type="button">Ajustar posição</button>
-        </div>
-      </div>
-      <div class="field social-field-gap">
-        <div class="label-line"><label for="profileStatusInput">STATUS</label><small id="profileStatusCount">0/60</small></div>
-        <input id="profileStatusInput" maxlength="60" placeholder="Ex.: Jogando, disponível, ausente..." />
-      </div>
-      <div class="field social-field-gap">
-        <div class="label-line"><label for="profileBioInput">BIO</label><small id="profileBioCount">0/160</small></div>
-        <textarea id="profileBioInput" maxlength="160" rows="4" placeholder="Conte um pouco sobre você..."></textarea>
-      </div>
-      <button id="saveProfile" class="btn btn-primary btn-wide" type="button">Salvar perfil</button>
-    </div>
-  </div>
-
-  <div id="friendsModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-backdrop" data-close-friends="true"></div>
-    <div class="modal-card glass-card friends-card">
-      <div class="modal-head">
-        <div><span>SOCIAL</span><h2>Amigos</h2></div>
-        <button id="closeFriends" class="modal-close" type="button">×</button>
-      </div>
-      <div class="friend-search-row">
-        <input id="friendSearchInput" maxlength="24" placeholder="Pesquisar usuário..." />
-        <button id="friendSearchButton" class="btn btn-primary" type="button">Pesquisar</button>
-      </div>
-      <div id="friendSearchResults" class="friend-list"></div>
-      <div class="friend-section-title"><span>PEDIDOS RECEBIDOS</span><b id="incomingFriendCount">0</b></div>
-      <div id="incomingFriends" class="friend-list"><div class="friend-empty">Nenhum pedido.</div></div>
-      <div class="friend-section-title"><span>SEUS AMIGOS</span><b id="acceptedFriendCount">0</b></div>
-      <div id="acceptedFriends" class="friend-list"><div class="friend-empty">Você ainda não adicionou amigos.</div></div>
-      <div class="friend-section-title"><span>PEDIDOS ENVIADOS</span><b id="outgoingFriendCount">0</b></div>
-      <div id="outgoingFriends" class="friend-list"><div class="friend-empty">Nenhum pedido pendente.</div></div>
-    </div>
-  </div>
-
-  <div id="themeModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-backdrop" data-close-theme="true"></div>
-    <div class="modal-card glass-card theme-card seasonal-theme-card">
-      <div class="modal-head">
-        <div><span>APARÊNCIA</span><h2>Escolha o tema do LNZ</h2></div>
-        <button id="closeTheme" class="modal-close" type="button">×</button>
-      </div>
-      <p class="theme-intro">Escolha entre o visual padrão LNZ e uma versão especial de Halloween. A escolha fica salva neste dispositivo.</p>
-      <div class="season-theme-grid">
-        <button class="season-theme-option" type="button" data-season-theme="default">
-          <div class="season-theme-preview default-preview"><span>LNZ</span></div>
-          <div><strong>Padrão LNZ</strong><small>Roxo, preto e visual original.</small></div>
-          <b>✓</b>
-        </button>
-        <button class="season-theme-option" type="button" data-season-theme="halloween">
-          <div class="season-theme-preview halloween-preview"><span>🎃</span></div>
-          <div><strong>Halloween</strong><small>Preto, roxo e laranja com animações.</small></div>
-          <b>✓</b>
-        </button>
-      </div>
-      <button id="saveTheme" class="btn btn-primary btn-wide" type="button">Salvar tema</button>
-    </div>
-  </div>
-
-  <div id="adminPanelModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-backdrop" data-close-admin="true"></div>
-    <div class="modal-card glass-card admin-panel-card">
-      <div class="modal-head admin-panel-head">
-        <div><span>PAINEL PRIVADO</span><h2>Administração LNZ</h2></div>
-        <div class="admin-head-actions">
-          <button id="refreshAdminPanel" class="btn btn-outline small-btn" type="button">↻ Atualizar</button>
-          <button id="closeAdminPanel" class="modal-close" type="button">×</button>
-        </div>
-      </div>
-      <div id="adminDatabaseBadge" class="admin-database-badge">Banco: —</div>
-
-      <div class="admin-stats-grid">
-        <div><strong id="adminStatUsers">0</strong><span>Contas</span></div>
-        <div><strong id="adminStatOnline">0</strong><span>Online</span></div>
-        <div><strong id="adminStatRooms">0</strong><span>Salas ativas</span></div>
-        <div><strong id="adminStatStreams">0</strong><span>Transmissões</span></div>
-        <div><strong id="adminStatSessions">0</strong><span>Sessões</span></div>
-        <div><strong id="adminStatFeedbacks">0</strong><span>Feedbacks</span></div>
-      </div>
-
-      <div class="admin-tabs" role="tablist">
-        <button class="admin-tab active" data-admin-tab="logs" type="button">Registros</button>
-        <button class="admin-tab" data-admin-tab="users" type="button">Usuários</button>
-        <button class="admin-tab" data-admin-tab="rooms" type="button">Salas</button>
-        <button class="admin-tab" data-admin-tab="feedbacks" type="button">Feedbacks</button>
-      </div>
-
-      <div id="adminTabLogs" class="admin-tab-panel">
-        <div class="admin-panel-title"><strong>Atividades recentes</strong><span>Senhas, códigos de recuperação e conteúdo das mensagens não aparecem aqui.</span></div>
-        <div id="adminLogsList" class="admin-list"></div>
-      </div>
-      <div id="adminTabUsers" class="admin-tab-panel hidden">
-        <div class="admin-panel-title"><strong>Contas cadastradas</strong><span>Cadastro, último login e status online.</span></div>
-        <div id="adminUsersList" class="admin-list"></div>
-      </div>
-      <div id="adminTabRooms" class="admin-tab-panel hidden">
-        <div class="admin-panel-title"><strong>Salas ativas agora</strong><span>Quantidade de participantes e transmissões por sala.</span></div>
-        <div id="adminRoomsList" class="admin-list"></div>
-      </div>
-      <div id="adminTabFeedbacks" class="admin-tab-panel hidden">
-        <div class="admin-panel-title"><strong>Feedbacks recebidos</strong><span>Os contatos opcionais só aparecem para o administrador.</span></div>
-        <div id="adminFeedbacksList" class="admin-list"></div>
       </div>
     </div>
   </div>
@@ -677,14 +455,15 @@
       <div class="avatar-editor-buttons">
         <button id="changeAvatarFromEditor" class="btn btn-outline" type="button">Trocar foto</button>
         <button id="resetAvatarZoom" class="btn btn-outline" type="button">Resetar</button>
-        <button id="saveAvatarEditor" class="btn btn-primary" type="button">Salvar foto/GIF</button>
+        <button id="saveAvatarEditor" class="btn btn-primary" type="button">Salvar ajuste</button>
       </div>
     </div>
   </div>
 
   <div id="toast" class="toast" role="status"></div>
-<script src="/socket.io/socket.io.js"></script>
+
+  <script src="/socket.io/socket.io.js"></script>
   <script src="/config.js"></script>
-  <script src="/app.js?v=stable-0901-1"></script>
+  <script src="/app.js"></script>
 </body>
 </html>

@@ -1,62 +1,32 @@
 LNZ TRANSMISSÃO - ATUALIZAÇÃO
 
-1) No GitHub, substitua estes arquivos/pastas pelo conteúdo desta versão:
-   - server.js
-   - package.json
-   - public/
-   - README.md
-   - .env.example (opcional, serve de referência)
+1. No GitHub, substitua estes arquivos/pastas pela versão deste ZIP:
+   server.js
+   public/app.js
+   public/index.html
+   public/style.css
+   public/assets/background-app.png
+   README.md
+   .env.example
 
-2) Faça Commit changes.
+2. Confirme as alterações (Commit changes).
 
-3) No Render, abra o Web Service.
+3. No Render > seu serviço > Environment, adicione:
+   FEEDBACK_WEBHOOK_URL = o webhook do Discord que você quer usar
+   DISCORD_URL = https://discord.gg/m67kQeZrns
 
-4) IMPORTANTE - BANCO DE DADOS:
-   Crie um PostgreSQL no Render e copie a Internal Database URL.
-   Em Web Service > Environment, crie:
-   DATABASE_URL = URL_INTERNA_DO_POSTGRES
+4. NÃO coloque o webhook dentro do GitHub.
 
-5) Mantenha também, se já usa:
-   DISCORD_URL=https://discord.gg/m67kQeZrns
-   FEEDBACK_WEBHOOK_URL=seu_webhook (somente no Render)
+5. Espere o Render fazer o deploy. Se não fizer:
+   Manual Deploy > Deploy latest commit
 
-6) Faça Manual Deploy > Deploy latest commit, caso não inicie sozinho.
+6. Abra o site e use Ctrl + F5.
 
-7) Quando aparecer Live, abra o site. Se o navegador estiver em versão antiga, o próprio site mostrará o botão Atualizar agora.
-
-NOVIDADES:
-- Login obrigatório.
-- Usuário único no banco.
-- Senha protegida por hash.
-- Sessão persistente.
-- Aviso de atualização/queda.
-- Várias pessoas podem transmitir a tela ao mesmo tempo.
-- Cada transmissão aparece separada e tem controle de som para quem assiste.
-
-RECUPERACAO DE CONTA
-- A nova versao adiciona codigo de recuperacao para troca de senha.
-- Nao precisa criar tabela manualmente: o servidor atualiza a tabela users sozinho.
-- Confirme que DATABASE_URL esta configurado no Render.
-- Depois do deploy, usuarios antigos devem entrar na conta e clicar em "Gerar novo codigo de recuperacao" uma vez.
-
-CORREÇÃO PERFIL / AMIGOS / COR DO SITE
-- Substitua server.js
-- Substitua public/app.js
-- Substitua public/index.html
-- Substitua public/style.css
-- Faça Commit changes e Deploy latest commit no Render.
-- Depois abra o site com Ctrl + F5.
-
-
-PAINEL ADMIN PRIVADO
-- No Render > Environment, adicione:
-  ADMIN_USERNAME=SEU_LOGIN_EXATO
-- Exemplo: ADMIN_USERNAME=lino
-- Somente essa conta, autenticada no site, consegue abrir /api/admin/dashboard e o Painel Admin.
-- O painel mostra contas cadastradas, usuários online, sessões, salas ativas, transmissões, feedbacks e registros de atividade.
-- Senhas, códigos de recuperação e conteúdo das mensagens do chat NÃO aparecem nos logs.
-
-
-TUDO SALVO NA CONTA
--------------------
-Confira no Render > Environment se DATABASE_URL está configurado com o PostgreSQL. Sem isso, contas/perfis persistentes não funcionarão.
+NOVO NESTA VERSÃO:
+- Call de voz com microfone ON/OFF.
+- Chat e envio de arquivos.
+- Ajuste completo da foto/avatar.
+- Fundo LNZ animado.
+- Feedback para Discord via variável do Render.
+- Dono pode abrir/fechar a entrada da sala.
+- Áudio opcional da aba na transmissão sem retorno no player do transmissor.

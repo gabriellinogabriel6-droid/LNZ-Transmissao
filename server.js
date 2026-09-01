@@ -10,46 +10,20 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: true, credentials: true },
-  maxHttpBufferSize: 24e6,
-  pingTimeout: 30000,
-  pingInterval: 25000
+  maxHttpBufferSize: 6e6
 });
 
-const parsedPort = Number.parseInt(String(process.env.PORT || '10000'), 10);
-const PORT = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 10000;
-const HOST = '0.0.0.0';
+const PORT = Number(process.env.PORT) || 3000;
 const rooms = new Map();
-
-console.log('[Render] Inicializando servidor Node...');
-process.on('unhandledRejection', (reason) => console.error('[Servidor] unhandledRejection:', reason));
-process.on('uncaughtException', (error) => console.error('[Servidor] uncaughtException:', error));
-
-app.use(express.json({ limit: '24mb' }));
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const dbPool = DATABASE_URL ? new Pool({
   connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  connectionTimeoutMillis: 5000,
-  idleTimeoutMillis: 30000
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 }) : null;
 let databaseReady = false;
 const memoryUsers = new Map();
 const memorySessions = new Map();
-const memoryFriendships = new Map();
-const memorySiteLogs = [];
-const MAX_MEMORY_SITE_LOGS = 500;
-
-function persistentAccountsRequired() {
-  return Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.NODE_ENV === 'production');
-}
-
-function ensurePersistentAccountStorage(_res) {
-  // Contas continuam funcionando mesmo sem PostgreSQL.
-  // Com DATABASE_URL conectado, os dados ficam persistentes; sem ele,
-  // o servidor usa armazenamento em memória até o próximo reinício.
-  return true;
-}
 
 function calculateAppVersion() {
   try {
@@ -75,84 +49,9 @@ function cleanAccountUsername(value) {
   return username;
 }
 
-function isAdminUser(user) {
-  const configured = cleanAccountUsername(process.env.ADMIN_USERNAME || '').toLowerCase();
-  if (!configured || !user?.username) return false;
-  return String(user.username).trim().toLowerCase() === configured;
-}
-
-function cleanLogText(value, max = 80) {
-  return String(value || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
-}
-
-async function logActivity({ userId = null, username = '', action = '', roomCode = '', details = {} } = {}) {
-  const item = {
-    id: crypto.randomUUID(),
-    userId: userId || null,
-    username: cleanLogText(username, 24),
-    action: cleanLogText(action, 64) || 'site.event',
-    roomCode: cleanLogText(roomCode, 9).toUpperCase(),
-    details: details && typeof details === 'object' ? details : {},
-    createdAt: Date.now()
-  };
-  if (databaseReady) {
-    try {
-      await dbPool.query(
-        'INSERT INTO site_logs (id,user_id,username,action,room_code,details,created_at) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)',
-        [item.id, item.userId, item.username || null, item.action, item.roomCode || null, JSON.stringify(item.details || {}), new Date(item.createdAt)]
-      );
-    } catch (error) {
-      console.error('[Logs] Falha ao salvar:', error?.message || error);
-    }
-  } else {
-    memorySiteLogs.push(item);
-    while (memorySiteLogs.length > MAX_MEMORY_SITE_LOGS) memorySiteLogs.shift();
-  }
-  return item;
-}
-
 function validateAccountPassword(value) {
   const password = String(value || '');
   return password.length >= 6 && password.length <= 72 ? password : '';
-}
-
-function generateRecoveryCode() {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const chars = Array.from({ length: 20 }, () => alphabet[crypto.randomInt(0, alphabet.length)]).join('');
-  return `LNZ-${chars.match(/.{1,4}/g).join('-')}`;
-}
-
-function normalizeRecoveryCode(value) {
-  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-}
-
-function recoveryCodeHash(value) {
-  return crypto.createHash('sha256').update(normalizeRecoveryCode(value)).digest('hex');
-}
-
-function verifyRecoveryCode(value, storedHash) {
-  try {
-    const attempt = Buffer.from(recoveryCodeHash(value), 'hex');
-    const expected = Buffer.from(String(storedHash || ''), 'hex');
-    return attempt.length === expected.length && crypto.timingSafeEqual(attempt, expected);
-  } catch {
-    return false;
-  }
-}
-
-const recoveryAttempts = new Map();
-function allowRecoveryAttempt(req) {
-  const key = String(req.ip || req.socket?.remoteAddress || 'unknown');
-  const now = Date.now();
-  const windowMs = 10 * 60 * 1000;
-  const current = recoveryAttempts.get(key);
-  if (!current || current.resetAt <= now) {
-    recoveryAttempts.set(key, { count: 1, resetAt: now + windowMs });
-    return true;
-  }
-  if (current.count >= 8) return false;
-  current.count += 1;
-  return true;
 }
 
 function parseCookies(req) {
@@ -172,10 +71,10 @@ function sessionTokenHash(token) {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
 
-function setSessionCookie(res, token, remember = false) {
+function setSessionCookie(res, token) {
+  const maxAge = 30 * 24 * 60 * 60;
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  const persistent = remember ? `; Max-Age=${90 * 24 * 60 * 60}` : '';
-  res.setHeader('Set-Cookie', `lnz_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax${secure}${persistent}`);
+  res.setHeader('Set-Cookie', `lnz_session=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`);
 }
 
 function clearSessionCookie(res) {
@@ -195,40 +94,9 @@ async function initDatabase() {
         username VARCHAR(24) NOT NULL,
         username_key VARCHAR(24) UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
-        recovery_code_hash CHAR(64),
-        recovery_code_created_at TIMESTAMPTZ,
-        avatar TEXT,
-        avatar_scale DOUBLE PRECISION NOT NULL DEFAULT 1.35,
-        avatar_x DOUBLE PRECISION NOT NULL DEFAULT 0,
-        avatar_y DOUBLE PRECISION NOT NULL DEFAULT 0,
-        bio VARCHAR(160) NOT NULL DEFAULT '',
-        status_text VARCHAR(60) NOT NULL DEFAULT '',
-        theme_color VARCHAR(7) NOT NULL DEFAULT '#7a3cff',
-        preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         last_login_at TIMESTAMPTZ
       );
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_code_hash CHAR(64);
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_code_created_at TIMESTAMPTZ;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_scale DOUBLE PRECISION NOT NULL DEFAULT 1.35;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_x DOUBLE PRECISION NOT NULL DEFAULT 0;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_y DOUBLE PRECISION NOT NULL DEFAULT 0;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS bio VARCHAR(160) NOT NULL DEFAULT '';
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS status_text VARCHAR(60) NOT NULL DEFAULT '';
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_color VARCHAR(7) NOT NULL DEFAULT '#7a3cff';
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
-      CREATE TABLE IF NOT EXISTS friendships (
-        user_a UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        user_b UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        requested_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        status VARCHAR(12) NOT NULL DEFAULT 'pending',
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        PRIMARY KEY (user_a,user_b),
-        CHECK (user_a <> user_b)
-      );
-      CREATE INDEX IF NOT EXISTS friendships_status_idx ON friendships(status);
       CREATE TABLE IF NOT EXISTS sessions (
         token_hash CHAR(64) PRIMARY KEY,
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -246,18 +114,6 @@ async function initDatabase() {
         room_code VARCHAR(9),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
-      CREATE TABLE IF NOT EXISTS site_logs (
-        id UUID PRIMARY KEY,
-        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-        username VARCHAR(24),
-        action VARCHAR(64) NOT NULL,
-        room_code VARCHAR(9),
-        details JSONB NOT NULL DEFAULT '{}'::jsonb,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS site_logs_created_idx ON site_logs(created_at DESC);
-      CREATE INDEX IF NOT EXISTS site_logs_user_idx ON site_logs(user_id);
-      CREATE INDEX IF NOT EXISTS site_logs_action_idx ON site_logs(action);
     `);
     databaseReady = true;
     const { rows } = await dbPool.query(`SELECT id,type,rating,message,contact,nickname,room_code,created_at FROM feedbacks ORDER BY created_at DESC LIMIT 200`);
@@ -280,186 +136,42 @@ async function initDatabase() {
   }
 }
 
-
-function cleanProfileText(value, max) {
-  return String(value || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
-}
-
-function cleanThemeColor(value) {
-  const color = String(value || '').trim().toLowerCase();
-  return /^#[0-9a-f]{6}$/.test(color) ? color : '#7a3cff';
-}
-
-function profileFromRow(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    username: row.username,
-    avatar: row.avatar || '',
-    avatarScale: cleanAvatarScale(row.avatar_scale ?? row.avatarScale ?? 1.35),
-    avatarOffsetX: cleanAvatarOffsetX(row.avatar_x ?? row.avatarOffsetX ?? 0),
-    avatarOffsetY: cleanAvatarOffsetY(row.avatar_y ?? row.avatarOffsetY ?? 0),
-    bio: row.bio || '',
-    status: row.status_text ?? row.status ?? '',
-    themeColor: cleanThemeColor(row.theme_color ?? row.themeColor ?? '#7a3cff'),
-    preferences: (row.preferences && typeof row.preferences === 'object') ? row.preferences : {},
-    createdAt: row.created_at ? new Date(row.created_at).getTime() : (row.createdAt || Date.now())
-  };
-}
-
-async function getUserProfileById(id) {
-  if (databaseReady) {
-    const { rows } = await dbPool.query('SELECT id,username,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,preferences,created_at FROM users WHERE id=$1 LIMIT 1', [id]);
-    return profileFromRow(rows[0]);
-  }
-  for (const row of memoryUsers.values()) if (row.id === id) return profileFromRow(row);
-  return null;
-}
-
-async function getUserProfileByUsername(username) {
-  const key = String(username || '').trim().toLowerCase();
-  if (!key) return null;
-  if (databaseReady) {
-    const { rows } = await dbPool.query('SELECT id,username,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,preferences,created_at FROM users WHERE username_key=$1 LIMIT 1', [key]);
-    return profileFromRow(rows[0]);
-  }
-  return profileFromRow(memoryUsers.get(key));
-}
-
-function isUserOnline(userId) {
-  for (const socket of io.sockets.sockets.values()) {
-    if (socket.data?.account?.id === userId) return true;
-  }
-  return false;
-}
-
-function friendPair(a,b) {
-  return String(a) < String(b) ? [a,b] : [b,a];
-}
-
-function memoryFriendKey(a,b) {
-  const [x,y]=friendPair(a,b); return `${x}:${y}`;
-}
-
-async function getFriendshipBetween(a,b) {
-  if (!a || !b || a === b) return null;
-  const [x,y]=friendPair(a,b);
-  if (databaseReady) {
-    const { rows } = await dbPool.query('SELECT user_a,user_b,requested_by,status,created_at,updated_at FROM friendships WHERE user_a=$1 AND user_b=$2 LIMIT 1',[x,y]);
-    return rows[0] || null;
-  }
-  return memoryFriendships.get(memoryFriendKey(a,b)) || null;
-}
-
-async function friendshipPublicStatus(viewerId,targetId) {
-  if (!viewerId || !targetId) return 'none';
-  if (viewerId === targetId) return 'self';
-  const rel = await getFriendshipBetween(viewerId,targetId);
-  if (!rel) return 'none';
-  if (rel.status === 'accepted') return 'friends';
-  return rel.requested_by === viewerId ? 'outgoing' : 'incoming';
-}
-
-function emitToAccount(userId, event, data={}) {
-  for (const socket of io.sockets.sockets.values()) {
-    if (socket.data?.account?.id === userId) socket.emit(event, data);
-  }
-}
-
 async function createUserAccount(username, password) {
   const id = crypto.randomUUID();
   const usernameKey = username.toLowerCase();
   const passwordHash = hashPassword(password);
-  const recoveryCode = generateRecoveryCode();
-  const recoveryHash = recoveryCodeHash(recoveryCode);
   if (databaseReady) {
     try {
-      await dbPool.query(
-        'INSERT INTO users (id,username,username_key,password_hash,recovery_code_hash,recovery_code_created_at) VALUES ($1,$2,$3,$4,$5,NOW())',
-        [id, username, usernameKey, passwordHash, recoveryHash]
-      );
-      const user = profileFromRow({ id, username, avatar:'', avatar_scale:1.35, avatar_x:0, avatar_y:0, bio:'', status_text:'', theme_color:'#7a3cff', preferences:{}, created_at:new Date() });
-      return { user, recoveryCode };
+      await dbPool.query('INSERT INTO users (id,username,username_key,password_hash) VALUES ($1,$2,$3,$4)', [id, username, usernameKey, passwordHash]);
+      return { id, username };
     } catch (error) {
       if (error?.code === '23505') throw new Error('Esse login já está em uso.');
       throw error;
     }
   }
   if (memoryUsers.has(usernameKey)) throw new Error('Esse login já está em uso.');
-  memoryUsers.set(usernameKey, { id, username, usernameKey, passwordHash, recoveryCodeHash: recoveryHash, recoveryCodeCreatedAt: Date.now(), avatar:'', avatarScale:1.35, avatarOffsetX:0, avatarOffsetY:0, bio:'', status:'', themeColor:'#7a3cff', preferences:{}, createdAt: Date.now() });
-  return { user: profileFromRow(memoryUsers.get(usernameKey)), recoveryCode };
-}
-
-async function regenerateRecoveryCodeForUser(userId) {
-  const recoveryCode = generateRecoveryCode();
-  const recoveryHash = recoveryCodeHash(recoveryCode);
-  if (databaseReady) {
-    await dbPool.query('UPDATE users SET recovery_code_hash=$1,recovery_code_created_at=NOW() WHERE id=$2', [recoveryHash, userId]);
-    return recoveryCode;
-  }
-  for (const row of memoryUsers.values()) {
-    if (row.id === userId) {
-      row.recoveryCodeHash = recoveryHash;
-      row.recoveryCodeCreatedAt = Date.now();
-      return recoveryCode;
-    }
-  }
-  throw new Error('Conta não encontrada.');
-}
-
-async function recoverUserAccount(username, recoveryCode, newPassword) {
-  const usernameKey = username.toLowerCase();
-  const newRecoveryCode = generateRecoveryCode();
-  const newRecoveryHash = recoveryCodeHash(newRecoveryCode);
-  const passwordHash = hashPassword(newPassword);
-
-  if (databaseReady) {
-    const { rows } = await dbPool.query(
-      'SELECT id,username,recovery_code_hash,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,preferences,created_at FROM users WHERE username_key=$1 LIMIT 1',
-      [usernameKey]
-    );
-    const row = rows[0];
-    if (!row || !row.recovery_code_hash || !verifyRecoveryCode(recoveryCode, row.recovery_code_hash)) return null;
-    await dbPool.query(
-      'UPDATE users SET password_hash=$1,recovery_code_hash=$2,recovery_code_created_at=NOW(),last_login_at=NOW() WHERE id=$3',
-      [passwordHash, newRecoveryHash, row.id]
-    );
-    await dbPool.query('DELETE FROM sessions WHERE user_id=$1', [row.id]);
-    return { user: profileFromRow(row), recoveryCode: newRecoveryCode };
-  }
-
-  const row = memoryUsers.get(usernameKey);
-  if (!row || !row.recoveryCodeHash || !verifyRecoveryCode(recoveryCode, row.recoveryCodeHash)) return null;
-  row.passwordHash = passwordHash;
-  row.recoveryCodeHash = newRecoveryHash;
-  row.recoveryCodeCreatedAt = Date.now();
-  for (const [tokenHash, session] of memorySessions.entries()) {
-    if (session.userId === row.id) memorySessions.delete(tokenHash);
-  }
-  return { user: profileFromRow(row), recoveryCode: newRecoveryCode };
+  memoryUsers.set(usernameKey, { id, username, usernameKey, passwordHash, createdAt: Date.now() });
+  return { id, username };
 }
 
 async function authenticateUser(username, password) {
   const usernameKey = username.toLowerCase();
   if (databaseReady) {
-    const { rows } = await dbPool.query('SELECT id,username,password_hash,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,preferences,created_at FROM users WHERE username_key=$1 LIMIT 1', [usernameKey]);
+    const { rows } = await dbPool.query('SELECT id,username,password_hash FROM users WHERE username_key=$1 LIMIT 1', [usernameKey]);
     const row = rows[0];
     if (!row || !verifyPassword(password, row.password_hash)) return null;
     await dbPool.query('UPDATE users SET last_login_at=NOW() WHERE id=$1', [row.id]);
-    return profileFromRow(row);
+    return { id: row.id, username: row.username };
   }
   const row = memoryUsers.get(usernameKey);
   if (!row || !verifyPassword(password, row.passwordHash)) return null;
-  return profileFromRow(row);
+  return { id: row.id, username: row.username };
 }
 
-async function createSessionForUser(user, remember = false) {
+async function createSessionForUser(user) {
   const token = crypto.randomBytes(32).toString('hex');
   const tokenHash = sessionTokenHash(token);
-  const lifetimeMs = remember
-    ? 90 * 24 * 60 * 60 * 1000
-    : 24 * 60 * 60 * 1000;
-  const expiresAt = new Date(Date.now() + lifetimeMs);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   if (databaseReady) {
     await dbPool.query('INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2,$3)', [tokenHash, user.id, expiresAt]);
   } else {
@@ -474,17 +186,17 @@ async function currentUserFromRequest(req) {
   const tokenHash = sessionTokenHash(token);
   if (databaseReady) {
     const { rows } = await dbPool.query(`
-      SELECT u.id,u.username,u.avatar,u.avatar_scale,u.avatar_x,u.avatar_y,u.bio,u.status_text,u.theme_color,u.preferences,u.created_at FROM sessions s JOIN users u ON u.id=s.user_id
+      SELECT u.id,u.username FROM sessions s JOIN users u ON u.id=s.user_id
       WHERE s.token_hash=$1 AND s.expires_at > NOW() LIMIT 1
     `, [tokenHash]);
-    return profileFromRow(rows[0]);
+    return rows[0] || null;
   }
   const session = memorySessions.get(tokenHash);
   if (!session || session.expiresAt <= Date.now()) {
     memorySessions.delete(tokenHash);
     return null;
   }
-  return await getUserProfileById(session.userId);
+  return { id: session.userId, username: session.username };
 }
 
 async function destroySession(req) {
@@ -498,303 +210,52 @@ async function destroySession(req) {
 app.get('/api/auth/me', async (req, res) => {
   try {
     const user = await currentUserFromRequest(req);
-    res.json({ ok: true, user: user ? { ...user, isAdmin: isAdminUser(user) } : null, persistentDatabase: databaseReady });
+    res.json({ ok: true, user, persistentDatabase: databaseReady });
   } catch {
     res.status(500).json({ ok: false, error: 'Não foi possível consultar sua conta.' });
   }
 });
 
-app.get('/api/auth/username-available', async (req, res) => {
-  const username = cleanAccountUsername(req.query?.username);
-  if (!username) return res.json({ ok: true, valid: false, available: false });
-  const key = username.toLowerCase();
-  try {
-    let exists = false;
-    if (databaseReady) {
-      const { rows } = await dbPool.query('SELECT 1 FROM users WHERE username_key=$1 LIMIT 1', [key]);
-      exists = rows.length > 0;
-    } else {
-      exists = memoryUsers.has(key);
-    }
-    res.json({ ok: true, valid: true, available: !exists });
-  } catch {
-    res.status(500).json({ ok: false, error: 'Não foi possível verificar o usuário.' });
-  }
-});
-
 app.post('/api/auth/register', async (req, res) => {
-  if (!ensurePersistentAccountStorage(res)) return;
   const username = cleanAccountUsername(req.body?.username);
   const password = validateAccountPassword(req.body?.password);
-  const remember = Boolean(req.body?.remember);
   if (!username) return res.status(400).json({ ok: false, error: 'Use um login de 3 a 24 caracteres: letras, números, ponto, hífen ou _.' });
   if (!password) return res.status(400).json({ ok: false, error: 'A senha precisa ter entre 6 e 72 caracteres.' });
   try {
-    const created = await createUserAccount(username, password);
-    const token = await createSessionForUser(created.user, remember);
-    setSessionCookie(res, token, remember);
-    logActivity({ userId: created.user.id, username: created.user.username, action: 'auth.register' }).catch(() => {});
-    res.json({ ok: true, user: { ...created.user, isAdmin: isAdminUser(created.user) }, recoveryCode: created.recoveryCode, persistentDatabase: databaseReady });
+    const user = await createUserAccount(username, password);
+    const token = await createSessionForUser(user);
+    setSessionCookie(res, token);
+    res.json({ ok: true, user, persistentDatabase: databaseReady });
   } catch (error) {
     res.status(400).json({ ok: false, error: error?.message || 'Não foi possível criar a conta.' });
   }
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  if (!ensurePersistentAccountStorage(res)) return;
   const username = cleanAccountUsername(req.body?.username);
   const password = validateAccountPassword(req.body?.password);
-  const remember = Boolean(req.body?.remember);
   if (!username || !password) return res.status(400).json({ ok: false, error: 'Login ou senha inválidos.' });
   try {
     const user = await authenticateUser(username, password);
     if (!user) return res.status(401).json({ ok: false, error: 'Login ou senha incorretos.' });
-    const token = await createSessionForUser(user, remember);
-    setSessionCookie(res, token, remember);
-    logActivity({ userId: user.id, username: user.username, action: 'auth.login' }).catch(() => {});
-    res.json({ ok: true, user: { ...user, isAdmin: isAdminUser(user) }, persistentDatabase: databaseReady });
+    const token = await createSessionForUser(user);
+    setSessionCookie(res, token);
+    res.json({ ok: true, user, persistentDatabase: databaseReady });
   } catch {
     res.status(500).json({ ok: false, error: 'Não foi possível entrar na conta.' });
   }
 });
 
-app.post('/api/auth/recover', async (req, res) => {
-  if (!ensurePersistentAccountStorage(res)) return;
-  if (!allowRecoveryAttempt(req)) return res.status(429).json({ ok: false, error: 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' });
-  const username = cleanAccountUsername(req.body?.username);
-  const recoveryCode = String(req.body?.recoveryCode || '').trim();
-  const password = validateAccountPassword(req.body?.password);
-  const remember = Boolean(req.body?.remember);
-  if (!username || normalizeRecoveryCode(recoveryCode).length < 16 || !password) {
-    return res.status(400).json({ ok: false, error: 'Confira o login, o código de recuperação e a nova senha.' });
-  }
-  try {
-    const recovered = await recoverUserAccount(username, recoveryCode, password);
-    if (!recovered) return res.status(401).json({ ok: false, error: 'Login ou código de recuperação incorretos.' });
-    const token = await createSessionForUser(recovered.user, remember);
-    setSessionCookie(res, token, remember);
-    logActivity({ userId: recovered.user.id, username: recovered.user.username, action: 'auth.recover' }).catch(() => {});
-    res.json({ ok: true, user: { ...recovered.user, isAdmin: isAdminUser(recovered.user) }, recoveryCode: recovered.recoveryCode, persistentDatabase: databaseReady });
-  } catch (error) {
-    console.error('[Conta] Falha na recuperação:', error?.message || error);
-    res.status(500).json({ ok: false, error: 'Não foi possível recuperar a conta agora.' });
-  }
-});
-
-app.post('/api/auth/recovery-code/regenerate', async (req, res) => {
-  try {
-    const user = await currentUserFromRequest(req);
-    if (!user) return res.status(401).json({ ok: false, error: 'Faça login.' });
-    const recoveryCode = await regenerateRecoveryCodeForUser(user.id);
-    res.json({ ok: true, recoveryCode });
-  } catch (error) {
-    res.status(500).json({ ok: false, error: 'Não foi possível gerar um novo código de recuperação.' });
-  }
-});
-
 app.post('/api/auth/logout', async (req, res) => {
-  let user = null;
-  try { user = await currentUserFromRequest(req); } catch {}
   try { await destroySession(req); } catch {}
-  if (user) logActivity({ userId: user.id, username: user.username, action: 'auth.logout' }).catch(() => {});
   clearSessionCookie(res);
   res.json({ ok: true });
 });
 
 
-app.get('/api/profile/me', async (req,res) => {
-  try {
-    const user = await currentUserFromRequest(req);
-    if (!user) return res.status(401).json({ok:false,error:'Faça login.'});
-    res.json({ok:true, profile:{...user, online:true}});
-  } catch { res.status(500).json({ok:false,error:'Não foi possível carregar seu perfil.'}); }
-});
-
-app.get('/api/profile/:username', async (req,res) => {
-  try {
-    const viewer = await currentUserFromRequest(req);
-    if (!viewer) return res.status(401).json({ok:false,error:'Faça login.'});
-    const profile = await getUserProfileByUsername(req.params.username);
-    if (!profile) return res.status(404).json({ok:false,error:'Usuário não encontrado.'});
-    const relation = await friendshipPublicStatus(viewer.id, profile.id);
-    res.json({ok:true, profile:{...profile, online:isUserOnline(profile.id)}, relation});
-  } catch { res.status(500).json({ok:false,error:'Não foi possível abrir o perfil.'}); }
-});
-
-app.post('/api/profile/update', async (req,res) => {
-  try {
-    const user = await currentUserFromRequest(req);
-    if (!user) return res.status(401).json({ok:false,error:'Faça login.'});
-    const rawAvatar = String(req.body?.avatar || '');
-    const avatar = cleanAvatar(rawAvatar);
-    if (rawAvatar && !avatar) return res.status(413).json({ok:false,error:'A foto/GIF é inválida ou passou do limite permitido.'});
-    const avatarScale = cleanAvatarScale(req.body?.avatarScale);
-    const avatarX = cleanAvatarOffsetX(req.body?.avatarOffsetX);
-    const avatarY = cleanAvatarOffsetY(req.body?.avatarOffsetY);
-    const bio = cleanProfileText(req.body?.bio,160);
-    const status = cleanProfileText(req.body?.status,60);
-    const themeColor = cleanThemeColor(req.body?.themeColor);
-    if (databaseReady) {
-      await dbPool.query('UPDATE users SET avatar=$1,avatar_scale=$2,avatar_x=$3,avatar_y=$4,bio=$5,status_text=$6,theme_color=$7 WHERE id=$8', [avatar||null,avatarScale,avatarX,avatarY,bio,status,themeColor,user.id]);
-    } else {
-      for (const row of memoryUsers.values()) if (row.id===user.id) Object.assign(row,{avatar,avatarScale,avatarOffsetX:avatarX,avatarOffsetY:avatarY,bio,status,themeColor});
-    }
-    const profile = await getUserProfileById(user.id);
-    emitToAccount(user.id,'profile-updated',{profile});
-    res.json({ok:true,profile});
-  } catch (error) { console.error('[Perfil] Falha ao salvar:', error?.message || error); res.status(500).json({ok:false,error:'Não foi possível salvar a foto/perfil no servidor.'}); }
-});
-
-
-function cleanUserPreferences(value) {
-  const input = value && typeof value === 'object' ? value : {};
-  return {
-    transmissionVolume: Math.min(1, Math.max(0, Number(input.transmissionVolume ?? 0.9) || 0)),
-    voiceVolume: Math.min(1, Math.max(0, Number(input.voiceVolume ?? 0.9) || 0)),
-    voiceOutputMuted: Boolean(input.voiceOutputMuted),
-    transmissionMuted: Boolean(input.transmissionMuted),
-    shareAudio: Boolean(input.shareAudio)
-  };
-}
-
-app.post('/api/preferences/update', async (req,res) => {
-  try {
-    const user = await currentUserFromRequest(req);
-    if (!user) return res.status(401).json({ok:false,error:'Faça login.'});
-    const preferences = cleanUserPreferences(req.body?.preferences);
-    if (databaseReady) {
-      await dbPool.query('UPDATE users SET preferences=$1::jsonb WHERE id=$2', [JSON.stringify(preferences), user.id]);
-    } else {
-      for (const row of memoryUsers.values()) if (row.id===user.id) row.preferences=preferences;
-    }
-    res.json({ok:true,preferences});
-  } catch {
-    res.status(500).json({ok:false,error:'Não foi possível salvar suas preferências.'});
-  }
-});
-
-app.get('/api/users/search', async (req,res) => {
-  try {
-    const viewer = await currentUserFromRequest(req);
-    if (!viewer) return res.status(401).json({ok:false,error:'Faça login.'});
-    const q=String(req.query.q||'').trim().toLowerCase().slice(0,24);
-    if (!q) return res.json({ok:true,users:[]});
-    let profiles=[];
-    if (databaseReady) {
-      const {rows}=await dbPool.query("SELECT id,username,avatar,avatar_scale,avatar_x,avatar_y,bio,status_text,theme_color,preferences,created_at FROM users WHERE username_key LIKE $1 AND id<>$2 ORDER BY username_key LIMIT 12", [`%${q}%`,viewer.id]);
-      profiles=rows.map(profileFromRow);
-    } else {
-      profiles=[...memoryUsers.values()].filter(r=>r.id!==viewer.id && r.usernameKey.includes(q)).slice(0,12).map(profileFromRow);
-    }
-    const users=[];
-    for (const profile of profiles) users.push({...profile,online:isUserOnline(profile.id),relation:await friendshipPublicStatus(viewer.id,profile.id)});
-    res.json({ok:true,users});
-  } catch { res.status(500).json({ok:false,error:'Não foi possível pesquisar usuários.'}); }
-});
-
-app.get('/api/friends', async (req,res) => {
-  try {
-    const viewer=await currentUserFromRequest(req);
-    if (!viewer) return res.status(401).json({ok:false,error:'Faça login.'});
-    const result={friends:[],incoming:[],outgoing:[]};
-    let relations=[];
-    if (databaseReady) {
-      const {rows}=await dbPool.query('SELECT user_a,user_b,requested_by,status,created_at,updated_at FROM friendships WHERE user_a=$1 OR user_b=$1 ORDER BY updated_at DESC',[viewer.id]);
-      relations=rows;
-    } else {
-      relations=[...memoryFriendships.values()].filter(r=>r.user_a===viewer.id||r.user_b===viewer.id);
-    }
-    for (const rel of relations) {
-      const otherId=rel.user_a===viewer.id?rel.user_b:rel.user_a;
-      const profile=await getUserProfileById(otherId);
-      if (!profile) continue;
-      const item={...profile,online:isUserOnline(otherId)};
-      if (rel.status==='accepted') result.friends.push(item);
-      else if (rel.requested_by===viewer.id) result.outgoing.push(item);
-      else result.incoming.push(item);
-    }
-    res.json({ok:true,...result});
-  } catch { res.status(500).json({ok:false,error:'Não foi possível carregar seus amigos.'}); }
-});
-
-app.post('/api/friends/request', async (req,res) => {
-  try {
-    const viewer=await currentUserFromRequest(req);
-    if (!viewer) return res.status(401).json({ok:false,error:'Faça login.'});
-    const target=await getUserProfileByUsername(req.body?.username);
-    if (!target) return res.status(404).json({ok:false,error:'Usuário não encontrado.'});
-    if (target.id===viewer.id) return res.status(400).json({ok:false,error:'Você não pode adicionar a si mesmo.'});
-    const existing=await getFriendshipBetween(viewer.id,target.id);
-    if (existing) {
-      if (existing.status==='accepted') return res.json({ok:true,status:'friends'});
-      if (existing.requested_by===target.id) {
-        const [a,b]=friendPair(viewer.id,target.id);
-        if (databaseReady) await dbPool.query("UPDATE friendships SET status='accepted',updated_at=NOW() WHERE user_a=$1 AND user_b=$2",[a,b]);
-        else Object.assign(existing,{status:'accepted',updated_at:Date.now()});
-        emitToAccount(target.id,'friendship-updated',{}); emitToAccount(viewer.id,'friendship-updated',{});
-        return res.json({ok:true,status:'friends'});
-      }
-      return res.json({ok:true,status:'outgoing'});
-    }
-    const [a,b]=friendPair(viewer.id,target.id);
-    if (databaseReady) await dbPool.query('INSERT INTO friendships (user_a,user_b,requested_by,status) VALUES ($1,$2,$3,$4)',[a,b,viewer.id,'pending']);
-    else memoryFriendships.set(memoryFriendKey(a,b),{user_a:a,user_b:b,requested_by:viewer.id,status:'pending',created_at:Date.now(),updated_at:Date.now()});
-    emitToAccount(target.id,'friend-request',{from:viewer.username});
-    res.json({ok:true,status:'outgoing'});
-  } catch { res.status(500).json({ok:false,error:'Não foi possível enviar o pedido.'}); }
-});
-
-app.post('/api/friends/respond', async (req,res) => {
-  try {
-    const viewer=await currentUserFromRequest(req);
-    if (!viewer) return res.status(401).json({ok:false,error:'Faça login.'});
-    const target=await getUserProfileByUsername(req.body?.username);
-    const action=req.body?.action==='accept'?'accept':'reject';
-    if (!target) return res.status(404).json({ok:false,error:'Usuário não encontrado.'});
-    const rel=await getFriendshipBetween(viewer.id,target.id);
-    if (!rel || rel.status!=='pending' || rel.requested_by===viewer.id) return res.status(400).json({ok:false,error:'Pedido não encontrado.'});
-    const [a,b]=friendPair(viewer.id,target.id);
-    if (action==='accept') {
-      if (databaseReady) await dbPool.query("UPDATE friendships SET status='accepted',updated_at=NOW() WHERE user_a=$1 AND user_b=$2",[a,b]);
-      else Object.assign(rel,{status:'accepted',updated_at:Date.now()});
-    } else {
-      if (databaseReady) await dbPool.query('DELETE FROM friendships WHERE user_a=$1 AND user_b=$2',[a,b]);
-      else memoryFriendships.delete(memoryFriendKey(a,b));
-    }
-    emitToAccount(target.id,'friendship-updated',{}); emitToAccount(viewer.id,'friendship-updated',{});
-    res.json({ok:true,status:action==='accept'?'friends':'none'});
-  } catch { res.status(500).json({ok:false,error:'Não foi possível responder ao pedido.'}); }
-});
-
-app.post('/api/friends/remove', async (req,res) => {
-  try {
-    const viewer=await currentUserFromRequest(req);
-    if (!viewer) return res.status(401).json({ok:false,error:'Faça login.'});
-    const target=await getUserProfileByUsername(req.body?.username);
-    if (!target) return res.status(404).json({ok:false,error:'Usuário não encontrado.'});
-    const [a,b]=friendPair(viewer.id,target.id);
-    if (databaseReady) await dbPool.query('DELETE FROM friendships WHERE user_a=$1 AND user_b=$2',[a,b]);
-    else memoryFriendships.delete(memoryFriendKey(a,b));
-    emitToAccount(target.id,'friendship-updated',{}); emitToAccount(viewer.id,'friendship-updated',{});
-    res.json({ok:true,status:'none'});
-  } catch { res.status(500).json({ok:false,error:'Não foi possível remover o amigo.'}); }
-});
-
-
 app.disable('x-powered-by');
-app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), { maxAge: '1d', etag: true }));
-app.use(express.static(path.join(__dirname, 'public'), {
-  etag: true,
-  maxAge: 0,
-  setHeaders(res, filePath) {
-    if (/\.(?:html|js|css)$/i.test(filePath)) {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    }
-  }
-}));
-
-app.get('/healthz', (_req, res) => res.status(200).send('ok'));
-app.get('/ready', (_req, res) => res.status(200).json({ ok: true, database: databaseReady ? 'postgres' : 'memory' }));
+app.use(express.json({ limit: '64kb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, rooms: rooms.size, feedbacks: feedbackItems.length, database: databaseReady ? 'postgres' : 'memory' });
@@ -829,7 +290,7 @@ app.get('/config.js', (_req, res) => {
   res.type('application/javascript').send(
     `window.LNZ_CONFIG = ${JSON.stringify({ 
       iceServers,
-      discordUrl: process.env.DISCORD_URL || 'https://discord.gg/FEwTjXmmzS',
+      discordUrl: process.env.DISCORD_URL || 'https://discord.gg/m67kQeZrns',
       brandName: process.env.BRAND_NAME || 'LNZ Transmissão',
       appVersion: APP_VERSION
     })};`
@@ -837,92 +298,11 @@ app.get('/config.js', (_req, res) => {
 });
 
 
-app.get('/api/admin/dashboard', async (req, res) => {
-  try {
-    const admin = await currentUserFromRequest(req);
-    if (!admin || !isAdminUser(admin)) return res.status(403).json({ ok: false, error: 'Acesso restrito ao administrador.' });
-
-    let users = [];
-    let logs = [];
-    let activeSessions = 0;
-    if (databaseReady) {
-      const [usersResult, logsResult, sessionsResult] = await Promise.all([
-        dbPool.query('SELECT id,username,created_at,last_login_at FROM users ORDER BY created_at DESC LIMIT 250'),
-        dbPool.query('SELECT id,user_id,username,action,room_code,details,created_at FROM site_logs ORDER BY created_at DESC LIMIT 300'),
-        dbPool.query('SELECT COUNT(*)::int AS count FROM sessions WHERE expires_at > NOW()')
-      ]);
-      users = usersResult.rows.map((row) => ({
-        id: row.id,
-        username: row.username,
-        createdAt: row.created_at ? new Date(row.created_at).getTime() : null,
-        lastLoginAt: row.last_login_at ? new Date(row.last_login_at).getTime() : null,
-        online: isUserOnline(row.id)
-      }));
-      logs = logsResult.rows.map((row) => ({
-        id: row.id,
-        userId: row.user_id,
-        username: row.username || '',
-        action: row.action,
-        roomCode: row.room_code || '',
-        details: row.details || {},
-        createdAt: new Date(row.created_at).getTime()
-      }));
-      activeSessions = Number(sessionsResult.rows?.[0]?.count || 0);
-    } else {
-      users = [...memoryUsers.values()].map((row) => ({
-        id: row.id,
-        username: row.username,
-        createdAt: row.createdAt || null,
-        lastLoginAt: null,
-        online: isUserOnline(row.id)
-      })).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
-      logs = memorySiteLogs.slice().reverse().slice(0, 300);
-      activeSessions = [...memorySessions.values()].filter((item) => item.expiresAt > Date.now()).length;
-    }
-
-    const liveRooms = [...rooms.values()].map((room) => ({
-      code: room.code,
-      visibility: room.visibility,
-      isOpen: room.isOpen !== false,
-      participants: room.participants.size,
-      sharers: room.sharerIds?.size || 0,
-      createdAt: room.createdAt
-    })).sort((a,b) => b.createdAt - a.createdAt);
-
-    const onlineUserIds = new Set();
-    for (const socket of io.sockets.sockets.values()) if (socket.data?.account?.id) onlineUserIds.add(socket.data.account.id);
-
-    res.set('Cache-Control', 'no-store');
-    res.json({
-      ok: true,
-      database: databaseReady ? 'postgres' : 'memory',
-      stats: {
-        users: users.length,
-        onlineUsers: onlineUserIds.size,
-        activeSessions,
-        activeRooms: rooms.size,
-        activeStreams: liveRooms.reduce((sum, room) => sum + room.sharers, 0),
-        feedbacks: feedbackItems.length
-      },
-      users,
-      rooms: liveRooms,
-      feedbacks: feedbackItems.slice().reverse().slice(0, 80),
-      logs
-    });
-  } catch (error) {
-    console.error('[Admin] Falha ao carregar painel:', error?.message || error);
-    res.status(500).json({ ok: false, error: 'Não foi possível carregar o painel administrativo.' });
-  }
-});
-
-app.get('/admin/feedback', async (req, res) => {
-  try {
-    const admin = await currentUserFromRequest(req);
-    if (!admin || !isAdminUser(admin)) return res.status(403).json({ ok: false, error: 'Acesso negado.' });
-    res.json({ ok: true, feedbacks: feedbackItems.slice().reverse() });
-  } catch {
-    res.status(500).json({ ok: false, error: 'Não foi possível carregar os feedbacks.' });
-  }
+app.get('/admin/feedback', (req, res) => {
+  const configured = String(process.env.FEEDBACK_ADMIN_TOKEN || '').trim();
+  const supplied = String(req.query.token || '').trim();
+  if (!configured || supplied !== configured) return res.status(403).json({ ok: false, error: 'Acesso negado.' });
+  res.json({ ok: true, feedbacks: feedbackItems.slice().reverse() });
 });
 
 // Permite abrir links como /room/ABCD-1234 diretamente.
@@ -957,7 +337,7 @@ function cleanAvatar(value) {
   const avatar = String(value || '');
   if (!avatar) return '';
   if (!avatar.startsWith('data:image/')) return '';
-  if (avatar.length > 14500000) return ''; // ~10 MB de arquivo após conversão para base64
+  if (avatar.length > 450000) return '';
   return avatar;
 }
 
@@ -1149,8 +529,7 @@ function roomPublicView(room) {
     code: room.code,
     visibility: room.visibility,
     participants: room.participants.size,
-    sharing: Boolean(room.sharerIds?.size),
-    sharingCount: room.sharerIds?.size || 0,
+    sharing: Boolean(room.sharerId),
     isOpen: room.isOpen !== false,
     createdAt: room.createdAt
   };
@@ -1159,18 +538,15 @@ function roomPublicView(room) {
 function participantView(id, participant, room) {
   return {
     id,
-    userId: participant.userId || null,
     nickname: participant.nickname,
     avatar: participant.avatar || '',
     avatarScale: cleanAvatarScale(participant.avatarScale),
     avatarOffsetX: cleanAvatarOffsetX(participant.avatarOffsetX),
     avatarOffsetY: cleanAvatarOffsetY(participant.avatarOffsetY),
     isHost: room.hostId === id,
-    isSharer: Boolean(room.sharerIds?.has(id)),
+    isSharer: room.sharerId === id,
     inVoice: Boolean(participant.inVoice),
     micMuted: Boolean(participant.micMuted),
-    serverMuted: Boolean(participant.serverMuted),
-    cameraOn: Boolean(participant.cameraOn),
     speaking: Boolean(participant.speaking) && Boolean(participant.inVoice) && !Boolean(participant.micMuted)
   };
 }
@@ -1195,7 +571,7 @@ function broadcastRoomState(room) {
   io.to(room.code).emit('room-state', {
     room: roomPublicView(room),
     participants: participantsFor(room),
-    sharerIds: [...(room.sharerIds || [])]
+    sharerId: room.sharerId
   });
 }
 
@@ -1208,19 +584,17 @@ function removeSocketFromRoom(socket, reason = 'left') {
   if (!room) return;
 
   const leavingParticipant = room.participants.get(socket.id);
-  if (leavingParticipant) logActivity({ userId: leavingParticipant.userId, username: leavingParticipant.nickname, action: 'room.leave', roomCode: code, details: { reason } }).catch(() => {});
   if (leavingParticipant?.inVoice) {
     socket.to(code).emit('voice-user-left', { userId: socket.id });
   }
   room.participants.delete(socket.id);
   socket.leave(code);
 
-  if (room.sharerIds?.has(socket.id)) {
-    room.sharerIds.delete(socket.id);
-    io.to(code).emit('sharing-stopped', { sharerId: socket.id, reason: 'A transmissão foi encerrada.' });
-  }
-  for (const sharerId of room.sharerIds || []) {
-    if (sharerId !== socket.id) io.to(sharerId).emit('viewer-left', { viewerId: socket.id });
+  if (room.sharerId === socket.id) {
+    room.sharerId = null;
+    io.to(code).emit('sharing-stopped', { reason: 'A transmissão foi encerrada.' });
+  } else if (room.sharerId) {
+    io.to(room.sharerId).emit('viewer-left', { viewerId: socket.id });
   }
 
   if (room.hostId === socket.id) {
@@ -1236,20 +610,7 @@ function removeSocketFromRoom(socket, reason = 'left') {
   broadcastPublicRooms();
 }
 
-function nicknameIsActive(nickname, exceptSocketId = '') {
-  const key = String(nickname || '').trim().toLocaleLowerCase('pt-BR');
-  if (!key) return false;
-  for (const room of rooms.values()) {
-    for (const [socketId, participant] of room.participants.entries()) {
-      if (socketId === exceptSocketId) continue;
-      if (String(participant.nickname || '').trim().toLocaleLowerCase('pt-BR') === key) return true;
-    }
-  }
-  return false;
-}
-
-io.on('connection', async (socket) => {
-  try { socket.data.account = await currentUserFromRequest(socket.request); } catch { socket.data.account = null; }
+io.on('connection', (socket) => {
   socket.emit('public-rooms-updated', publicRooms());
   socket.emit('app-version', { version: APP_VERSION });
   socket.emit('public-feedback-updated', feedbackItems.slice().reverse().slice(0, 60).map(publicFeedbackView));
@@ -1279,8 +640,7 @@ io.on('connection', async (socket) => {
     const mode = visibility === 'private' ? 'private' : 'public';
     const pass = String(password || '');
 
-    if (!cleanName) return callback({ ok: false, error: 'Escolha seu user.' });
-    if (nicknameIsActive(cleanName, socket.id)) return callback({ ok: false, error: 'Esse user já está sendo usado. Escolha outro nome.' });
+    if (!cleanName) return callback({ ok: false, error: 'Digite seu nickname.' });
     if (mode === 'private' && pass.length < 4) {
       return callback({ ok: false, error: 'A senha da sala privada precisa ter pelo menos 4 caracteres.' });
     }
@@ -1293,7 +653,7 @@ io.on('connection', async (socket) => {
       visibility: mode,
       passwordHash: mode === 'private' ? hashPassword(pass) : null,
       hostId: socket.id,
-      sharerIds: new Set(),
+      sharerId: null,
       isOpen: true,
       createdAt: Date.now(),
       participants: new Map(),
@@ -1302,7 +662,6 @@ io.on('connection', async (socket) => {
     };
 
     room.participants.set(socket.id, {
-      userId: null,
       nickname: cleanName,
       avatar: cleanAvatar(avatar),
       avatarScale: cleanAvatarScale(avatarScale),
@@ -1316,15 +675,13 @@ io.on('connection', async (socket) => {
     rooms.set(code, room);
     socket.join(code);
     socket.data.roomCode = code;
-    logActivity({ userId: null, username: cleanName, action: 'room.create', roomCode: code, details: { visibility: mode } }).catch(() => {});
 
     callback({
       ok: true,
       room: roomPublicView(room),
       participants: participantsFor(room),
       chatMessages: room.chatMessages.map(chatMessageView),
-      me: socket.id,
-      sharerIds: [...room.sharerIds]
+      me: socket.id
     });
 
     broadcastRoomState(room);
@@ -1342,12 +699,10 @@ io.on('connection', async (socket) => {
     if (room.visibility === 'private' && !verifyPassword(password, room.passwordHash)) {
       return callback({ ok: false, error: 'Senha da sala incorreta.' });
     }
-    if (nicknameIsActive(cleanName, socket.id)) return callback({ ok: false, error: 'Esse user já está sendo usado. Escolha outro nome.' });
 
     removeSocketFromRoom(socket);
 
     room.participants.set(socket.id, {
-      userId: null,
       nickname: cleanName,
       avatar: cleanAvatar(avatar),
       avatarScale: cleanAvatarScale(avatarScale),
@@ -1359,7 +714,6 @@ io.on('connection', async (socket) => {
     });
     socket.join(code);
     socket.data.roomCode = code;
-    logActivity({ userId: null, username: cleanName, action: 'room.join', roomCode: code, details: { visibility: room.visibility } }).catch(() => {});
 
     callback({
       ok: true,
@@ -1367,14 +721,14 @@ io.on('connection', async (socket) => {
       participants: participantsFor(room),
       chatMessages: room.chatMessages.map(chatMessageView),
       me: socket.id,
-      sharerIds: [...(room.sharerIds || [])]
+      sharerId: room.sharerId
     });
 
     broadcastRoomState(room);
     broadcastPublicRooms();
 
-    for (const sharerId of room.sharerIds) {
-      if (sharerId !== socket.id) io.to(sharerId).emit('viewer-joined', { viewerId: socket.id });
+    if (room.sharerId && room.sharerId !== socket.id) {
+      io.to(room.sharerId).emit('viewer-joined', { viewerId: socket.id });
     }
   });
 
@@ -1389,8 +743,6 @@ io.on('connection', async (socket) => {
     }
 
     room.isOpen = Boolean(open);
-    const accessParticipant = room.participants.get(socket.id);
-    logActivity({ userId: accessParticipant?.userId, username: accessParticipant?.nickname, action: room.isOpen ? 'room.open' : 'room.close', roomCode: code }).catch(() => {});
     callback({ ok: true, isOpen: room.isOpen });
     io.to(code).emit('room-access-changed', { isOpen: room.isOpen, changedBy: socket.id });
     broadcastRoomState(room);
@@ -1432,7 +784,6 @@ io.on('connection', async (socket) => {
     };
 
     addChatMessage(room, message, fileResult.bytes);
-    logActivity({ userId: participant.userId, username: participant.nickname, action: 'chat.message', roomCode: code, details: { hasAttachment: Boolean(fileResult.attachment), attachmentName: fileResult.attachment?.name || '' } }).catch(() => {});
     io.to(code).emit('chat-message', chatMessageView(message));
     callback({ ok: true, messageId: message.id });
   });
@@ -1449,10 +800,7 @@ io.on('connection', async (socket) => {
 
     participant.inVoice = true;
     participant.micMuted = false;
-    participant.serverMuted = false;
-    participant.cameraOn = false;
     participant.speaking = false;
-    logActivity({ userId: participant.userId, username: participant.nickname, action: 'voice.join', roomCode: code }).catch(() => {});
     callback({ ok: true, peerIds });
     socket.to(code).emit('voice-user-joined', { userId: socket.id });
     broadcastRoomState(room);
@@ -1465,10 +813,7 @@ io.on('connection', async (socket) => {
     if (room && participant?.inVoice) {
       participant.inVoice = false;
       participant.micMuted = false;
-      participant.serverMuted = false;
-      participant.cameraOn = false;
       participant.speaking = false;
-      logActivity({ userId: participant.userId, username: participant.nickname, action: 'voice.leave', roomCode: code }).catch(() => {});
       socket.to(code).emit('voice-user-left', { userId: socket.id });
       broadcastRoomState(room);
     }
@@ -1480,25 +825,8 @@ io.on('connection', async (socket) => {
     const room = rooms.get(code);
     const participant = room?.participants.get(socket.id);
     if (!room || !participant?.inVoice) return callback({ ok: false });
-    if (participant.serverMuted && !Boolean(muted)) {
-      participant.micMuted = true;
-      participant.speaking = false;
-      broadcastRoomState(room);
-      return callback({ ok: false, error: 'Seu microfone foi bloqueado pelo dono da sala.', serverMuted: true });
-    }
-    participant.micMuted = Boolean(muted) || Boolean(participant.serverMuted);
+    participant.micMuted = Boolean(muted);
     if (participant.micMuted) participant.speaking = false;
-    broadcastRoomState(room);
-    callback({ ok: true, serverMuted: Boolean(participant.serverMuted) });
-  });
-
-  socket.on('voice-camera-state', ({ on }, callback = () => {}) => {
-    const code = socket.data.roomCode;
-    const room = rooms.get(code);
-    const participant = room?.participants.get(socket.id);
-    if (!room || !participant?.inVoice) return callback({ ok: false });
-    participant.cameraOn = Boolean(on);
-    logActivity({ userId: participant.userId, username: participant.nickname, action: participant.cameraOn ? 'voice.camera_on' : 'voice.camera_off', roomCode: code }).catch(() => {});
     broadcastRoomState(room);
     callback({ ok: true });
   });
@@ -1513,43 +841,6 @@ io.on('connection', async (socket) => {
       participant.speaking = next;
       broadcastRoomState(room);
     }
-    callback({ ok: true });
-  });
-
-  socket.on('host-mute-participant', ({ target }, callback = () => {}) => {
-    const code = socket.data.roomCode;
-    const room = rooms.get(code);
-    if (!room || room.hostId !== socket.id) return callback({ ok: false, error: 'Somente o dono da sala pode fazer isso.' });
-    if (!target || target === socket.id) return callback({ ok: false, error: 'Participante inválido.' });
-    const person = room.participants.get(target);
-    if (!person?.inVoice) return callback({ ok: false, error: 'Essa pessoa não está na call.' });
-
-    person.serverMuted = !Boolean(person.serverMuted);
-    if (person.serverMuted) {
-      person.micMuted = true;
-      person.speaking = false;
-      io.to(target).emit('voice-force-muted', { by: socket.id });
-    } else {
-      person.micMuted = true;
-      person.speaking = false;
-      io.to(target).emit('voice-server-mute-released', { by: socket.id });
-    }
-    logActivity({ userId: person.userId, username: person.nickname, action: person.serverMuted ? 'voice.server_mute' : 'voice.server_unmute', roomCode: code, details: { by: room.participants.get(socket.id)?.nickname || 'host' } }).catch(() => {});
-    broadcastRoomState(room);
-    callback({ ok: true, serverMuted: person.serverMuted });
-  });
-
-  socket.on('host-kick-participant', ({ target }, callback = () => {}) => {
-    const code = socket.data.roomCode;
-    const room = rooms.get(code);
-    if (!room || room.hostId !== socket.id) return callback({ ok: false, error: 'Somente o dono da sala pode remover pessoas.' });
-    if (!target || target === socket.id) return callback({ ok: false, error: 'Participante inválido.' });
-    const targetSocket = io.sockets.sockets.get(target);
-    if (!targetSocket || targetSocket.data.roomCode !== code) return callback({ ok: false, error: 'Participante não encontrado.' });
-    const person = room.participants.get(target);
-    io.to(target).emit('kicked-from-room', { reason: 'Você foi removido pelo dono da sala.' });
-    logActivity({ userId: person?.userId, username: person?.nickname || 'Participante', action: 'room.kicked', roomCode: code, details: { by: room.participants.get(socket.id)?.nickname || 'host' } }).catch(() => {});
-    removeSocketFromRoom(targetSocket, 'kicked');
     callback({ ok: true });
   });
 
@@ -1582,7 +873,7 @@ io.on('connection', async (socket) => {
       rating: cleanRating,
       message: cleanMessage,
       contact: cleanContact,
-      nickname: participant?.nickname || socket.data.account?.username || '',
+      nickname: participant?.nickname || '',
       roomCode: room?.code || '',
       createdAt: now
     };
@@ -1599,7 +890,6 @@ io.on('connection', async (socket) => {
 
     const discordResult = await forwardFeedbackToDiscord(item);
     console.log(`[Feedback] ${item.type} ${item.rating}/5 ${item.nickname || 'Visitante'}: ${item.message.slice(0, 120)}`);
-    logActivity({ userId: participant?.userId || socket.data.account?.id || null, username: item.nickname, action: 'feedback.submit', roomCode: item.roomCode, details: { type: item.type, rating: item.rating } }).catch(() => {});
     callback({ ok: true, sentToDiscord: discordResult.sent });
   });
 
@@ -1614,12 +904,13 @@ io.on('connection', async (socket) => {
     if (!room || !room.participants.has(socket.id)) {
       return callback({ ok: false, error: 'Você não está em uma sala.' });
     }
+    if (room.sharerId && room.sharerId !== socket.id) {
+      return callback({ ok: false, error: 'Outra pessoa já está compartilhando a tela.' });
+    }
 
-    room.sharerIds.add(socket.id);
-    const sharingParticipant = room.participants.get(socket.id);
-    logActivity({ userId: sharingParticipant?.userId, username: sharingParticipant?.nickname, action: 'stream.start', roomCode: code }).catch(() => {});
+    room.sharerId = socket.id;
     const viewerIds = [...room.participants.keys()].filter((id) => id !== socket.id);
-    callback({ ok: true, viewerIds, sharerIds: [...room.sharerIds] });
+    callback({ ok: true, viewerIds });
     io.to(code).emit('sharing-started', { sharerId: socket.id });
     broadcastRoomState(room);
     broadcastPublicRooms();
@@ -1628,11 +919,9 @@ io.on('connection', async (socket) => {
   socket.on('stop-sharing', (_payload, callback = () => {}) => {
     const code = socket.data.roomCode;
     const room = rooms.get(code);
-    if (room && room.sharerIds.has(socket.id)) {
-      const sharingParticipant = room.participants.get(socket.id);
-      room.sharerIds.delete(socket.id);
-      logActivity({ userId: sharingParticipant?.userId, username: sharingParticipant?.nickname, action: 'stream.stop', roomCode: code }).catch(() => {});
-      io.to(code).emit('sharing-stopped', { sharerId: socket.id, reason: 'A transmissão foi encerrada.' });
+    if (room && room.sharerId === socket.id) {
+      room.sharerId = null;
+      io.to(code).emit('sharing-stopped', { reason: 'A transmissão foi encerrada.' });
       broadcastRoomState(room);
       broadcastPublicRooms();
     }
@@ -1652,26 +941,8 @@ io.on('connection', async (socket) => {
   });
 });
 
-// Sobe o HTTP imediatamente. No Render isso evita 502 durante o boot
-// caso o PostgreSQL externo esteja lento, dormindo ou temporariamente indisponível.
-server.keepAliveTimeout = 120000;
-server.headersTimeout = 120000;
-server.requestTimeout = 120000;
-
-server.on('error', (error) => {
-  console.error('[Servidor] Erro HTTP:', error?.message || error);
-});
-
-server.listen(PORT, HOST, () => {
-  console.log(`[Render] LNZ Transmissão ONLINE em http://${HOST}:${PORT}`);
-  console.log(`[Render] PORT=${process.env.PORT || '(não definido; usando 10000)'}`);
-
-  // Banco inicializa em segundo plano. O site continua funcional em memória
-  // enquanto a conexão persistente não estiver pronta.
-  initDatabase()
-    .then(() => logActivity({
-      action: 'system.start',
-      details: { version: APP_VERSION, database: databaseReady ? 'postgres' : 'memory' }
-    }).catch(() => {}))
-    .catch((error) => console.error('[Banco] Inicialização em segundo plano falhou:', error?.message || error));
+initDatabase().finally(() => {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`LNZ Transmissão online em http://localhost:${PORT}`);
+  });
 });
