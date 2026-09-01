@@ -1258,20 +1258,26 @@ async function startSharing() {
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: { ideal: 30, max: 60 } },
+
+      // MODO DISCORD-SAFE:
+      // tenta transmitir apenas o áudio da guia/janela compartilhada.
+      // O áudio geral do computador fica excluído para evitar capturar
+      // Discord, chamadas, notificações e outros aplicativos.
       audio: state.shareAudio ? {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
         suppressLocalAudioPlayback: false
       } : false,
-      systemAudio: state.shareAudio ? 'include' : 'exclude',
+      systemAudio: 'exclude',
+      windowAudio: state.shareAudio ? 'window' : 'exclude',
       monitorTypeSurfaces: 'include',
       selfBrowserSurface: 'exclude',
       surfaceSwitching: 'include'
     });
 
     if (state.shareAudio && stream.getAudioTracks().length === 0) {
-      showToast('Nenhum áudio foi capturado. Se quiser som, marque a opção de áudio na janela do navegador ao escolher o que compartilhar.');
+      showToast('O navegador não liberou áudio isolado desta guia/janela. O áudio geral do PC e o Discord continuam bloqueados da transmissão.');
     }
 
     const result = await new Promise((resolve) => socket.emit('start-sharing', {}, resolve));
@@ -1366,7 +1372,7 @@ function updateAudioControl() {
   button.disabled = false;
   button.textContent = state.shareAudio ? '🔊 Enviar áudio ON' : '🔇 Enviar áudio OFF';
   button.classList.toggle('audio-on', state.shareAudio);
-  button.title = 'Ative antes de compartilhar. O navegador pode permitir som da tela inteira, janela ou aba, dependendo do sistema.';
+  button.title = 'Envia somente o áudio da guia/janela quando disponível. Discord e áudio geral do PC ficam fora da transmissão.';
 }
 
 $('audioControl').addEventListener('click', () => {
@@ -1380,7 +1386,7 @@ $('audioControl').addEventListener('click', () => {
   if (state.isSharing) return;
   state.shareAudio = !state.shareAudio;
   updateAudioControl();
-  showToast(state.shareAudio ? 'Áudio ativado para a próxima transmissão.' : 'Áudio da transmissão desativado.');
+  showToast(state.shareAudio ? 'Áudio do app/guia ativado. Discord fica fora da transmissão.' : 'Áudio da transmissão desativado.');
 });
 
 $('mixerControl')?.addEventListener('click', () => {

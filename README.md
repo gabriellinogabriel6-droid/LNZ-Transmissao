@@ -100,3 +100,14 @@ Importante:
 
 - O botão **Enviar feedback** foi removido da lateral/rodapé da sala.
 - Agora **Feedbacks** e **Enviar feedback** ficam no **menu principal / tela inicial**.
+
+
+## Transmissão estilo Discord — áudio separado
+
+- O padrão visual original foi mantido.
+- O compartilhamento bloqueia o áudio geral do sistema com `systemAudio: exclude`.
+- Quando o navegador suporta, solicita somente áudio da janela com `windowAudio: window`.
+- Uma guia do navegador pode enviar o áudio da própria guia.
+- Discord, chamadas e notificações do sistema não são solicitados pela transmissão.
+- O Discord continua funcionando normalmente para quem transmite.
+- Se o navegador não conseguir fornecer áudio isolado do aplicativo, a transmissão fica sem esse áudio em vez de capturar o áudio geral do PC.
