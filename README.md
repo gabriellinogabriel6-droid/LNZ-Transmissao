@@ -75,3 +75,13 @@ Sem TURN, WebRTC funciona em muitas redes, mas pode falhar em alguns NATs/firewa
 ## Observação
 
 As salas, mensagens e feedbacks ficam em memória. Quando o Render reinicia o serviço, esses dados temporários são apagados.
+
+
+## Áudio na tela inteira
+
+Esta versão tenta permitir áudio também em **Tela inteira**, além de janela/aba, quando o navegador e o sistema operacional oferecerem essa opção.
+
+Importante:
+- a janela de escolha do que compartilhar é do próprio **Chrome/Edge**, então o texto e os botões dela não podem ser personalizados pelo site;
+- em alguns PCs o navegador libera áudio da **Tela inteira**; em outros, só de **Janela** ou **Guia/Aba**;
+- se você ativar áudio na tela inteira, pode captar sons do sistema, inclusive Discord, jogo, música e notificações.

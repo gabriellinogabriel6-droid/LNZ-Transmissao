@@ -1120,16 +1120,20 @@ async function startSharing() {
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: { ideal: 30, max: 60 } },
-      // Áudio é opcional e focado em aba do navegador. O áudio geral do sistema
-      // fica excluído para reduzir retorno e evitar capturar Discord/Windows.
-      audio: state.shareAudio,
-      systemAudio: 'exclude',
+      audio: state.shareAudio ? {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        suppressLocalAudioPlayback: true
+      } : false,
+      systemAudio: state.shareAudio ? 'include' : 'exclude',
+      monitorTypeSurfaces: 'include',
       selfBrowserSurface: 'exclude',
       surfaceSwitching: 'include'
     });
 
     if (state.shareAudio && stream.getAudioTracks().length === 0) {
-      showToast('Nenhum áudio foi capturado. Para transmitir som, escolha uma aba do navegador e ative o áudio da aba.');
+      showToast('Nenhum áudio foi capturado. Se quiser som, marque a opção de áudio na janela do navegador ao escolher o que compartilhar.');
     }
 
     const result = await new Promise((resolve) => socket.emit('start-sharing', {}, resolve));
@@ -1222,9 +1226,9 @@ function updateAudioControl() {
   }
 
   button.disabled = false;
-  button.textContent = state.shareAudio ? '🔊 Áudio da aba ON' : '🔇 Áudio da aba OFF';
+  button.textContent = state.shareAudio ? '🔊 Áudio ON' : '🔇 Áudio OFF';
   button.classList.toggle('audio-on', state.shareAudio);
-  button.title = 'Ative antes de compartilhar. Para evitar Discord/retorno, use áudio de uma aba do navegador.';
+  button.title = 'Ative antes de compartilhar. O navegador pode permitir som da tela inteira, janela ou aba, dependendo do sistema.';
 }
 
 $('audioControl').addEventListener('click', () => {
@@ -1238,7 +1242,7 @@ $('audioControl').addEventListener('click', () => {
   if (state.isSharing) return;
   state.shareAudio = !state.shareAudio;
   updateAudioControl();
-  showToast(state.shareAudio ? 'Áudio da aba ativado para a próxima transmissão.' : 'Áudio da transmissão desativado.');
+  showToast(state.shareAudio ? 'Áudio ativado para a próxima transmissão.' : 'Áudio da transmissão desativado.');
 });
 
 $('shareFromEmpty').addEventListener('click', startSharing);
