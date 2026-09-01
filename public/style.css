@@ -1283,3 +1283,56 @@ input:focus, textarea:focus { border-color: var(--accent) !important; box-shadow
   .auth-welcome h2 { font-size:22px; }
   .auth-brandline { margin-bottom:20px; }
 }
+
+
+/* Temas LNZ: Padrão e Halloween */
+.seasonal-decor { display:none; position:fixed; inset:0; z-index:-1; overflow:hidden; pointer-events:none; }
+.seasonal-decor span { position:absolute; opacity:.18; filter:drop-shadow(0 0 18px rgba(255,122,0,.2)); }
+.seasonal-decor span:nth-child(1) { left:8%; top:18%; font-size:28px; animation:halloweenFloat 8s ease-in-out infinite; }
+.seasonal-decor span:nth-child(2) { right:13%; top:30%; font-size:22px; animation:halloweenFloat 10s ease-in-out -2s infinite; }
+.seasonal-decor span:nth-child(3) { right:28%; bottom:18%; font-size:20px; animation:halloweenFloat 9s ease-in-out -4s infinite; }
+.seasonal-decor span:nth-child(4) { right:8%; top:10%; font-size:82px; opacity:.12; color:#ffb156; filter:drop-shadow(0 0 30px rgba(255,122,0,.22)); animation:halloweenMoon 7s ease-in-out infinite; }
+@keyframes halloweenFloat { 0%,100% { transform:translate3d(0,0,0) rotate(-5deg); } 50% { transform:translate3d(12px,-16px,0) rotate(7deg); } }
+@keyframes halloweenMoon { 0%,100% { transform:scale(1); } 50% { transform:scale(1.06); } }
+
+.season-theme-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:18px 0; }
+.season-theme-option { position:relative; display:grid; grid-template-columns:70px 1fr auto; align-items:center; gap:12px; min-height:92px; padding:12px; border-radius:16px; border:1px solid var(--line); background:rgba(255,255,255,.018); color:var(--text); text-align:left; cursor:pointer; transition:.18s ease; }
+.season-theme-option:hover { transform:translateY(-2px); border-color:var(--line-strong); background:rgba(255,255,255,.032); }
+.season-theme-option.active { border-color:var(--accent); box-shadow:0 0 0 2px rgba(var(--user-accent-rgb),.14),0 15px 35px rgba(0,0,0,.18); }
+.season-theme-option > b { opacity:0; font-size:15px; color:var(--accent-2); }
+.season-theme-option.active > b { opacity:1; }
+.season-theme-option strong, .season-theme-option small { display:block; }
+.season-theme-option strong { font-size:13px; }
+.season-theme-option small { color:#8f849e; font-size:10px; line-height:1.35; margin-top:4px; }
+.season-theme-preview { width:70px; height:60px; border-radius:12px; display:grid; place-items:center; overflow:hidden; border:1px solid rgba(255,255,255,.07); font-weight:900; }
+.default-preview { background:radial-gradient(circle at 30% 20%, rgba(154,92,255,.35), transparent 38%),linear-gradient(140deg,#151020,#07050c); color:#c8aaff; }
+.halloween-preview { background:radial-gradient(circle at 28% 20%, rgba(255,122,0,.38), transparent 38%),linear-gradient(140deg,#1c0c20,#080508); font-size:27px; }
+
+html[data-season-theme="halloween"] body { background:#060308; }
+html[data-season-theme="halloween"] .seasonal-decor { display:block; }
+html[data-season-theme="halloween"] .background-art {
+  background:
+    linear-gradient(90deg, rgba(7,3,10,.96) 0%, rgba(26,8,29,.88) 46%, rgba(12,5,5,.78) 100%),
+    radial-gradient(circle at 78% 42%, rgba(255,122,0,.18), transparent 35%),
+    radial-gradient(circle at 28% 34%, rgba(127,52,255,.20), transparent 28%),
+    linear-gradient(130deg,#050208 0%,#170719 50%,#090304 100%);
+}
+html[data-season-theme="halloween"] .background-art::after { filter:saturate(1.18) contrast(1.06); opacity:.31; }
+html[data-season-theme="halloween"] .glass-card,
+html[data-season-theme="halloween"] .room-topbar,
+html[data-season-theme="halloween"] .room-sidebar { border-color:rgba(255,122,0,.18); }
+html[data-season-theme="halloween"] .live-badge { color:#ffad57; }
+html[data-season-theme="halloween"] .public-dot { background:#ff7a00; box-shadow:0 0 12px rgba(255,122,0,.65); }
+html[data-season-theme="halloween"] .mini-brand > span { box-shadow:0 0 18px rgba(255,122,0,.55); }
+html[data-season-theme="halloween"] .btn-primary { box-shadow:0 12px 30px rgba(255,122,0,.18); }
+html[data-season-theme="halloween"] .hero-copy h1 em { color:#ffe1c1; text-shadow:0 0 28px rgba(255,122,0,.20); }
+
+@media (max-width:600px) {
+  .season-theme-grid { grid-template-columns:1fr; }
+  .season-theme-option { grid-template-columns:58px 1fr auto; }
+  .season-theme-preview { width:58px; height:54px; }
+  .seasonal-decor span:nth-child(4) { font-size:58px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .seasonal-decor span { animation:none !important; }
+}

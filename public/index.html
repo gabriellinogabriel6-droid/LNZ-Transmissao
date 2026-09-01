@@ -15,6 +15,7 @@
 <body>
   <div class="background-art"></div>
   <div class="noise"></div>
+  <div id="seasonalDecor" class="seasonal-decor" aria-hidden="true"><span>🦇</span><span>🦇</span><span>🦇</span><span>☾</span></div>
 
   <div id="updateBanner" class="update-banner hidden" role="status">
     <div>
@@ -41,10 +42,8 @@
           <button id="heroCreateRoom" class="btn btn-primary hero-main-btn">Criar sala agora</button>
           <a id="discordButton" class="btn btn-outline hero-discord-btn hidden" href="#" target="_blank" rel="noopener noreferrer">Entrar no Discord</a>
           <button id="heroFeedbacks" class="btn btn-outline hero-discord-btn" type="button">💬 Ver feedbacks</button>
+          <button id="themeModeButton" class="btn btn-outline hero-discord-btn" type="button">🎭 Tema</button>
           <button id="heroSendFeedback" class="btn btn-outline hero-discord-btn" type="button">💜 Enviar feedback</button>
-          <button id="myProfileButton" class="btn btn-outline hero-discord-btn social-account-action hidden" type="button">👤 Meu perfil</button>
-          <button id="friendsButton" class="btn btn-outline hero-discord-btn social-account-action hidden" type="button">👥 Amigos <b id="friendRequestBadge" class="friend-request-badge hidden">0</b></button>
-          <button id="themeButton" class="btn btn-outline hero-discord-btn social-account-action hidden" type="button">🎨 Cor do site</button>
           <button id="adminPanelButton" class="btn btn-outline hero-discord-btn admin-only hidden" type="button">🛡 Painel Admin</button>
         </div>
       </div>
@@ -147,9 +146,6 @@
       <button id="railChat" class="rail-item" type="button" title="Chat">💬</button>
       <button id="railCall" class="rail-item" type="button" title="Call de voz">🎙</button>
       <span class="rail-separator"></span>
-      <button id="railFriends" class="rail-item" type="button" title="Amigos">👥</button>
-      <button id="railProfile" class="rail-item" type="button" title="Meu perfil">👤</button>
-      <button id="railTheme" class="rail-item" type="button" title="Cor do site">🎨</button>
       <button id="railAdmin" class="rail-item admin-only hidden" type="button" title="Painel Admin">🛡</button>
     </aside>
 
@@ -582,26 +578,25 @@
 
   <div id="themeModal" class="modal hidden" aria-hidden="true">
     <div class="modal-backdrop" data-close-theme="true"></div>
-    <div class="modal-card glass-card theme-card">
+    <div class="modal-card glass-card theme-card seasonal-theme-card">
       <div class="modal-head">
-        <div><span>APARÊNCIA</span><h2>Escolha a cor do seu site</h2></div>
+        <div><span>APARÊNCIA</span><h2>Escolha o tema do LNZ</h2></div>
         <button id="closeTheme" class="modal-close" type="button">×</button>
       </div>
-      <p class="theme-intro">Essa cor fica salva na sua conta e muda os botões, brilhos e detalhes só para você.</p>
-      <div id="themePresets" class="theme-presets">
-        <button type="button" data-theme="#7a3cff" style="--swatch:#7a3cff" title="Roxo"></button>
-        <button type="button" data-theme="#00b8d9" style="--swatch:#00b8d9" title="Azul"></button>
-        <button type="button" data-theme="#00c978" style="--swatch:#00c978" title="Verde"></button>
-        <button type="button" data-theme="#ff3b8d" style="--swatch:#ff3b8d" title="Rosa"></button>
-        <button type="button" data-theme="#ff7a00" style="--swatch:#ff7a00" title="Laranja"></button>
-        <button type="button" data-theme="#e3b341" style="--swatch:#e3b341" title="Dourado"></button>
-        <button type="button" data-theme="#ef4444" style="--swatch:#ef4444" title="Vermelho"></button>
+      <p class="theme-intro">Escolha entre o visual padrão LNZ e uma versão especial de Halloween. A escolha fica salva neste dispositivo.</p>
+      <div class="season-theme-grid">
+        <button class="season-theme-option" type="button" data-season-theme="default">
+          <div class="season-theme-preview default-preview"><span>LNZ</span></div>
+          <div><strong>Padrão LNZ</strong><small>Roxo, preto e visual original.</small></div>
+          <b>✓</b>
+        </button>
+        <button class="season-theme-option" type="button" data-season-theme="halloween">
+          <div class="season-theme-preview halloween-preview"><span>🎃</span></div>
+          <div><strong>Halloween</strong><small>Preto, roxo e laranja com animações.</small></div>
+          <b>✓</b>
+        </button>
       </div>
-      <div class="theme-custom-row">
-        <input id="themeColorPicker" type="color" value="#7a3cff" />
-        <div><strong>Cor personalizada</strong><span id="themeHexLabel">#7A3CFF</span></div>
-      </div>
-      <button id="saveTheme" class="btn btn-primary btn-wide" type="button">Salvar minha cor</button>
+      <button id="saveTheme" class="btn btn-primary btn-wide" type="button">Salvar tema</button>
     </div>
   </div>
 

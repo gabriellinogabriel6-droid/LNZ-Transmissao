@@ -288,3 +288,17 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - Nas telas de cadastro/recuperação há um botão **Voltar para entrar**.
 - Campo de senha com mostrar/ocultar.
 - A criação de conta continua verificando usuário único.
+
+## Interface simplificada
+
+- Removidos da tela principal os atalhos **Amigos**, **Meu perfil** e **Cor do site**.
+- Removidos também os mesmos atalhos da barra lateral da sala.
+- O restante do site foi mantido.
+
+
+## Temas visuais
+
+- **Padrão LNZ**: visual roxo/preto original.
+- **Halloween**: preto, roxo e laranja com animações sutis de morcegos e lua.
+- A escolha fica salva no navegador.
+- O tema respeita `prefers-reduced-motion` para reduzir animações quando o dispositivo solicitar.

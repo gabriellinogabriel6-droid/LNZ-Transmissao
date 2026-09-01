@@ -30,6 +30,8 @@ const state = {
   activeProfile: null,
   activeProfileRelation: 'none',
   themeColor: localStorage.getItem('lnz_theme_color') || '#7a3cff',
+  seasonTheme: localStorage.getItem('lnz_season_theme') || 'default',
+  pendingSeasonTheme: localStorage.getItem('lnz_season_theme') || 'default',
   authMode: 'login',
   authRequired: false,
   suppressDisconnectBanner: false,
@@ -741,9 +743,21 @@ function closeFriendsModal() {
   $('friendsModal')?.setAttribute('aria-hidden', 'true');
 }
 
+function applySeasonTheme(mode) {
+  const selected = mode === 'halloween' ? 'halloween' : 'default';
+  state.pendingSeasonTheme = selected;
+  document.documentElement.dataset.seasonTheme = selected;
+  applyThemeColor(selected === 'halloween' ? '#ff7a00' : '#7a3cff');
+  document.querySelectorAll('[data-season-theme]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.seasonTheme === selected);
+  });
+  const button = $('themeModeButton');
+  if (button) button.textContent = selected === 'halloween' ? '🎃 Halloween' : '🎭 Tema';
+}
+
 function openThemeModal() {
-  if (!ensureLoggedIn()) return;
-  applyThemeColor(state.account?.themeColor || state.themeColor || '#7a3cff');
+  state.pendingSeasonTheme = state.seasonTheme || 'default';
+  applySeasonTheme(state.pendingSeasonTheme);
   $('themeModal').classList.remove('hidden');
   $('themeModal').setAttribute('aria-hidden', 'false');
 }
@@ -751,37 +765,23 @@ function openThemeModal() {
 function closeThemeModal() {
   $('themeModal')?.classList.add('hidden');
   $('themeModal')?.setAttribute('aria-hidden', 'true');
-  applyThemeColor(state.account?.themeColor || state.themeColor || '#7a3cff');
+  applySeasonTheme(state.seasonTheme || 'default');
 }
 
-async function saveThemeColor() {
-  if (!state.account) return;
-  const selected = $('themeColorPicker').value;
-  applyThemeColor(selected);
-  try {
-    const data = await apiJson('/api/profile/update', {
-      method: 'POST',
-      body: JSON.stringify({
-        avatar: state.account.avatar || state.avatar,
-        avatarScale: state.account.avatarScale ?? state.avatarScale,
-        avatarOffsetX: state.account.avatarOffsetX ?? state.avatarOffsetX,
-        avatarOffsetY: state.account.avatarOffsetY ?? state.avatarOffsetY,
-        status: state.account.status || '',
-        bio: state.account.bio || '',
-        themeColor: selected
-      })
-    });
-    state.account = { ...state.account, ...data.profile };
-    applyThemeColor(data.profile.themeColor);
-    closeThemeModal();
-    showToast('Cor do site salva na sua conta.');
-  } catch (error) { showToast(error.message); }
+function saveThemeColor() {
+  state.seasonTheme = state.pendingSeasonTheme === 'halloween' ? 'halloween' : 'default';
+  localStorage.setItem('lnz_season_theme', state.seasonTheme);
+  applySeasonTheme(state.seasonTheme);
+  $('themeModal')?.classList.add('hidden');
+  $('themeModal')?.setAttribute('aria-hidden', 'true');
+  showToast(state.seasonTheme === 'halloween' ? 'Tema Halloween ativado. 🎃' : 'Tema padrão LNZ ativado.');
 }
 
 // Social: Perfil, Amigos e Cor do site.
 $('myProfileButton')?.addEventListener('click', () => openUserProfile(state.account?.username));
 $('friendsButton')?.addEventListener('click', openFriendsModal);
 $('themeButton')?.addEventListener('click', openThemeModal);
+$('themeModeButton')?.addEventListener('click', openThemeModal);
 $('closeProfile')?.addEventListener('click', closeProfileModal);
 $('profileModal')?.addEventListener('click', (event) => { if (event.target.dataset.closeProfile) closeProfileModal(); });
 $('profileFriendAction')?.addEventListener('click', runProfileFriendAction);
@@ -799,8 +799,7 @@ $('friendSearchButton')?.addEventListener('click', searchFriends);
 $('friendSearchInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') searchFriends(); });
 $('closeTheme')?.addEventListener('click', closeThemeModal);
 $('themeModal')?.addEventListener('click', (event) => { if (event.target.dataset.closeTheme) closeThemeModal(); });
-$('themeColorPicker')?.addEventListener('input', () => applyThemeColor($('themeColorPicker').value));
-document.querySelectorAll('#themePresets [data-theme]').forEach((button) => button.addEventListener('click', () => applyThemeColor(button.dataset.theme)));
+document.querySelectorAll('[data-season-theme]').forEach((button) => button.addEventListener('click', () => applySeasonTheme(button.dataset.seasonTheme)));
 $('saveTheme')?.addEventListener('click', saveThemeColor);
 
 socket.on('friend-request', ({ from }) => {
@@ -3244,3 +3243,7 @@ $('channelCall')?.addEventListener('click', () => {
   if (!state.voiceJoined) joinVoiceCall();
   setDiscordChannelActive('call');
 });
+
+
+// Tema visual sazonal
+applySeasonTheme(state.seasonTheme || 'default');
