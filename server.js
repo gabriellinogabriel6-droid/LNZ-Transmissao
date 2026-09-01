@@ -16,6 +16,8 @@ const io = new Server(server, {
 const PORT = Number(process.env.PORT) || 3000;
 const rooms = new Map();
 
+app.use(express.json({ limit: '64kb' }));
+
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const dbPool = DATABASE_URL ? new Pool({
   connectionString: DATABASE_URL,
@@ -254,7 +256,6 @@ app.post('/api/auth/logout', async (req, res) => {
 
 
 app.disable('x-powered-by');
-app.use(express.json({ limit: '64kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/health', (_req, res) => {
@@ -529,7 +530,8 @@ function roomPublicView(room) {
     code: room.code,
     visibility: room.visibility,
     participants: room.participants.size,
-    sharing: Boolean(room.sharerId),
+    sharing: Boolean(room.sharerIds?.size),
+    sharingCount: room.sharerIds?.size || 0,
     isOpen: room.isOpen !== false,
     createdAt: room.createdAt
   };
@@ -544,7 +546,7 @@ function participantView(id, participant, room) {
     avatarOffsetX: cleanAvatarOffsetX(participant.avatarOffsetX),
     avatarOffsetY: cleanAvatarOffsetY(participant.avatarOffsetY),
     isHost: room.hostId === id,
-    isSharer: room.sharerId === id,
+    isSharer: Boolean(room.sharerIds?.has(id)),
     inVoice: Boolean(participant.inVoice),
     micMuted: Boolean(participant.micMuted),
     speaking: Boolean(participant.speaking) && Boolean(participant.inVoice) && !Boolean(participant.micMuted)
@@ -571,7 +573,7 @@ function broadcastRoomState(room) {
   io.to(room.code).emit('room-state', {
     room: roomPublicView(room),
     participants: participantsFor(room),
-    sharerId: room.sharerId
+    sharerIds: [...(room.sharerIds || [])]
   });
 }
 
@@ -590,11 +592,12 @@ function removeSocketFromRoom(socket, reason = 'left') {
   room.participants.delete(socket.id);
   socket.leave(code);
 
-  if (room.sharerId === socket.id) {
-    room.sharerId = null;
-    io.to(code).emit('sharing-stopped', { reason: 'A transmissão foi encerrada.' });
-  } else if (room.sharerId) {
-    io.to(room.sharerId).emit('viewer-left', { viewerId: socket.id });
+  if (room.sharerIds?.has(socket.id)) {
+    room.sharerIds.delete(socket.id);
+    io.to(code).emit('sharing-stopped', { sharerId: socket.id, reason: 'A transmissão foi encerrada.' });
+  }
+  for (const sharerId of room.sharerIds || []) {
+    if (sharerId !== socket.id) io.to(sharerId).emit('viewer-left', { viewerId: socket.id });
   }
 
   if (room.hostId === socket.id) {
@@ -610,7 +613,8 @@ function removeSocketFromRoom(socket, reason = 'left') {
   broadcastPublicRooms();
 }
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
+  try { socket.data.account = await currentUserFromRequest(socket.request); } catch { socket.data.account = null; }
   socket.emit('public-rooms-updated', publicRooms());
   socket.emit('app-version', { version: APP_VERSION });
   socket.emit('public-feedback-updated', feedbackItems.slice().reverse().slice(0, 60).map(publicFeedbackView));
@@ -636,7 +640,9 @@ io.on('connection', (socket) => {
   });
 
   socket.on('create-room', ({ nickname, avatar, avatarScale, avatarOffsetX, avatarOffsetY, visibility, password }, callback = () => {}) => {
-    const cleanName = cleanNickname(nickname);
+    const account = socket.data.account;
+    if (!account) return callback({ ok: false, error: 'Faça login para criar uma sala.' });
+    const cleanName = cleanNickname(account.username);
     const mode = visibility === 'private' ? 'private' : 'public';
     const pass = String(password || '');
 
@@ -653,7 +659,7 @@ io.on('connection', (socket) => {
       visibility: mode,
       passwordHash: mode === 'private' ? hashPassword(pass) : null,
       hostId: socket.id,
-      sharerId: null,
+      sharerIds: new Set(),
       isOpen: true,
       createdAt: Date.now(),
       participants: new Map(),
@@ -662,6 +668,7 @@ io.on('connection', (socket) => {
     };
 
     room.participants.set(socket.id, {
+      userId: account.id,
       nickname: cleanName,
       avatar: cleanAvatar(avatar),
       avatarScale: cleanAvatarScale(avatarScale),
@@ -681,7 +688,8 @@ io.on('connection', (socket) => {
       room: roomPublicView(room),
       participants: participantsFor(room),
       chatMessages: room.chatMessages.map(chatMessageView),
-      me: socket.id
+      me: socket.id,
+      sharerIds: [...room.sharerIds]
     });
 
     broadcastRoomState(room);
@@ -689,8 +697,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join-room', ({ roomCode, nickname, avatar, avatarScale, avatarOffsetX, avatarOffsetY, password }, callback = () => {}) => {
+    const account = socket.data.account;
+    if (!account) return callback({ ok: false, error: 'Faça login para entrar em uma sala.' });
     const code = normalizeCode(compactCode(roomCode));
-    const cleanName = cleanNickname(nickname);
+    const cleanName = cleanNickname(account.username);
     const room = rooms.get(code);
 
     if (!room) return callback({ ok: false, error: 'Sala não encontrada ou encerrada.' });
@@ -699,10 +709,13 @@ io.on('connection', (socket) => {
     if (room.visibility === 'private' && !verifyPassword(password, room.passwordHash)) {
       return callback({ ok: false, error: 'Senha da sala incorreta.' });
     }
+    const duplicateAccount = [...room.participants.values()].some((person) => person.userId === account.id);
+    if (duplicateAccount) return callback({ ok: false, error: 'Sua conta já está conectada nessa sala.' });
 
     removeSocketFromRoom(socket);
 
     room.participants.set(socket.id, {
+      userId: account.id,
       nickname: cleanName,
       avatar: cleanAvatar(avatar),
       avatarScale: cleanAvatarScale(avatarScale),
@@ -721,14 +734,14 @@ io.on('connection', (socket) => {
       participants: participantsFor(room),
       chatMessages: room.chatMessages.map(chatMessageView),
       me: socket.id,
-      sharerId: room.sharerId
+      sharerIds: [...(room.sharerIds || [])]
     });
 
     broadcastRoomState(room);
     broadcastPublicRooms();
 
-    if (room.sharerId && room.sharerId !== socket.id) {
-      io.to(room.sharerId).emit('viewer-joined', { viewerId: socket.id });
+    for (const sharerId of room.sharerIds) {
+      if (sharerId !== socket.id) io.to(sharerId).emit('viewer-joined', { viewerId: socket.id });
     }
   });
 
@@ -873,7 +886,7 @@ io.on('connection', (socket) => {
       rating: cleanRating,
       message: cleanMessage,
       contact: cleanContact,
-      nickname: participant?.nickname || '',
+      nickname: participant?.nickname || socket.data.account?.username || '',
       roomCode: room?.code || '',
       createdAt: now
     };
@@ -904,13 +917,10 @@ io.on('connection', (socket) => {
     if (!room || !room.participants.has(socket.id)) {
       return callback({ ok: false, error: 'Você não está em uma sala.' });
     }
-    if (room.sharerId && room.sharerId !== socket.id) {
-      return callback({ ok: false, error: 'Outra pessoa já está compartilhando a tela.' });
-    }
 
-    room.sharerId = socket.id;
+    room.sharerIds.add(socket.id);
     const viewerIds = [...room.participants.keys()].filter((id) => id !== socket.id);
-    callback({ ok: true, viewerIds });
+    callback({ ok: true, viewerIds, sharerIds: [...room.sharerIds] });
     io.to(code).emit('sharing-started', { sharerId: socket.id });
     broadcastRoomState(room);
     broadcastPublicRooms();
@@ -919,9 +929,9 @@ io.on('connection', (socket) => {
   socket.on('stop-sharing', (_payload, callback = () => {}) => {
     const code = socket.data.roomCode;
     const room = rooms.get(code);
-    if (room && room.sharerId === socket.id) {
-      room.sharerId = null;
-      io.to(code).emit('sharing-stopped', { reason: 'A transmissão foi encerrada.' });
+    if (room && room.sharerIds.has(socket.id)) {
+      room.sharerIds.delete(socket.id);
+      io.to(code).emit('sharing-stopped', { sharerId: socket.id, reason: 'A transmissão foi encerrada.' });
       broadcastRoomState(room);
       broadcastPublicRooms();
     }

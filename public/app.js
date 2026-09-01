@@ -28,11 +28,18 @@ const state = {
   mixerOpen: false,
   account: null,
   authMode: 'login',
+  authRequired: false,
+  suppressDisconnectBanner: false,
+  appVersion: null,
   isSharing: false,
   localStream: null,
-  sharerId: null,
+  sharerIds: new Set(),
   outboundPeers: new Map(),
-  inboundPeer: null,
+  inboundPeers: new Map(),
+  inboundStreams: new Map(),
+  screenPendingInboundIce: new Map(),
+  screenPendingOutboundIce: new Map(),
+  mutedSharers: new Set(),
   voiceJoined: false,
   voiceMuted: false,
   voiceStream: null,
@@ -62,10 +69,216 @@ function applyDiscordLinks() {
   }
 }
 
+
+function setAuthMode(mode) {
+  state.authMode = mode === 'register' ? 'register' : 'login';
+  const register = state.authMode === 'register';
+  $('authLoginTab')?.classList.toggle('active', !register);
+  $('authRegisterTab')?.classList.toggle('active', register);
+  $('authConfirmWrap')?.classList.toggle('hidden', !register);
+  if ($('authTitle')) $('authTitle').textContent = register ? 'Criar sua conta' : 'Entrar na sua conta';
+  if ($('authSubmit')) $('authSubmit').textContent = register ? 'Criar conta' : 'Entrar';
+  if ($('authPassword')) $('authPassword').autocomplete = register ? 'new-password' : 'current-password';
+  $('authError')?.classList.add('hidden');
+}
+
+function updateAccountUI() {
+  const logged = Boolean(state.account);
+  $('accountButton')?.classList.toggle('hidden', logged);
+  $('accountSignedIn')?.classList.toggle('hidden', !logged);
+  $('authLoggedOut')?.classList.toggle('hidden', logged);
+  $('authLoggedIn')?.classList.toggle('hidden', !logged);
+  if (logged) {
+    const username = state.account.username;
+    if ($('accountUsernameLabel')) $('accountUsernameLabel').textContent = username;
+    if ($('authLoggedInUsername')) $('authLoggedInUsername').textContent = username;
+    state.nickname = username;
+    localStorage.setItem('lnz_nickname', username);
+    if ($('landingNickname')) {
+      $('landingNickname').value = username;
+      $('landingNickname').readOnly = true;
+    }
+    if ($('prejoinNickname')) {
+      $('prejoinNickname').value = username;
+      $('prejoinNickname').readOnly = true;
+    }
+    updateNicknamePreview();
+  } else {
+    if ($('landingNickname')) $('landingNickname').readOnly = true;
+    if ($('prejoinNickname')) $('prejoinNickname').readOnly = true;
+  }
+}
+
+function openAuthModal(required = false) {
+  state.authRequired = required || !state.account;
+  document.body.classList.toggle('auth-required', state.authRequired && !state.account);
+  setAuthMode(state.authMode);
+  updateAccountUI();
+  $('authModal')?.classList.remove('hidden');
+  $('authModal')?.setAttribute('aria-hidden', 'false');
+  setTimeout(() => $('authUsername')?.focus(), 60);
+  return false;
+}
+
+function closeAuthModal() {
+  if (!state.account && state.authRequired) return;
+  document.body.classList.remove('auth-required');
+  $('authModal')?.classList.add('hidden');
+  $('authModal')?.setAttribute('aria-hidden', 'true');
+}
+
+async function reconnectSocketAfterAuth() {
+  state.suppressDisconnectBanner = true;
+  if (socket.connected) socket.disconnect();
+  return new Promise((resolve) => {
+    const done = () => {
+      state.suppressDisconnectBanner = false;
+      resolve();
+    };
+    socket.once('connect', done);
+    socket.connect();
+    setTimeout(done, 4000);
+  });
+}
+
+async function loadAccount() {
+  try {
+    const response = await fetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store' });
+    const data = await response.json();
+    state.account = data?.user || null;
+    if ($('authDatabaseStatus')) {
+      $('authDatabaseStatus').textContent = data?.persistentDatabase
+        ? 'Conta salva com segurança no banco PostgreSQL.'
+        : 'Atenção: configure DATABASE_URL no Render para salvar contas permanentemente.';
+    }
+  } catch {
+    state.account = null;
+  }
+  updateAccountUI();
+  if (!state.account) openAuthModal(true);
+  return state.account;
+}
+
+async function submitAuth() {
+  const username = $('authUsername')?.value.trim() || '';
+  const password = $('authPassword')?.value || '';
+  const confirm = $('authPasswordConfirm')?.value || '';
+  const error = $('authError');
+  if (error) error.classList.add('hidden');
+
+  if (state.authMode === 'register' && password !== confirm) {
+    if (error) { error.textContent = 'As duas senhas precisam ser iguais.'; error.classList.remove('hidden'); }
+    return;
+  }
+
+  const button = $('authSubmit');
+  if (button) { button.disabled = true; button.textContent = state.authMode === 'register' ? 'Criando...' : 'Entrando...'; }
+  try {
+    const response = await fetch(`/api/auth/${state.authMode === 'register' ? 'register' : 'login'}`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível entrar.');
+    state.account = data.user;
+    state.authRequired = false;
+    document.body.classList.remove('auth-required');
+    updateAccountUI();
+    await reconnectSocketAfterAuth();
+    closeAuthModal();
+    showToast(state.authMode === 'register' ? 'Conta criada e conectada.' : 'Login realizado.');
+    await loadPublicRooms();
+    await routeFromLocation();
+  } catch (err) {
+    if (error) { error.textContent = err?.message || 'Não foi possível entrar.'; error.classList.remove('hidden'); }
+  } finally {
+    if (button) { button.disabled = false; button.textContent = state.authMode === 'register' ? 'Criar conta' : 'Entrar'; }
+  }
+}
+
+async function logoutAccount() {
+  if (state.room) await leaveRoom();
+  try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch {}
+  state.account = null;
+  updateAccountUI();
+  await reconnectSocketAfterAuth();
+  openAuthModal(true);
+  showToast('Você saiu da conta.');
+}
+
+function ensureLoggedIn() {
+  if (state.account) return true;
+  openAuthModal(true);
+  showToast('Faça login para continuar.');
+  return false;
+}
+
+function showUpdateBanner(title, message, connectionLost = false) {
+  const banner = $('updateBanner');
+  if (!banner) return;
+  banner.querySelector('strong').textContent = title;
+  banner.querySelector('span').textContent = message;
+  banner.classList.toggle('connection-lost', connectionLost);
+  banner.classList.remove('hidden');
+}
+
+function hideUpdateBanner() {
+  $('updateBanner')?.classList.add('hidden');
+}
+
+async function checkAppVersion() {
+  try {
+    const response = await fetch(`/version?t=${Date.now()}`, { cache: 'no-store' });
+    const data = await response.json();
+    if (!data?.version) return;
+    if (!state.appVersion) state.appVersion = data.version;
+    else if (state.appVersion !== data.version) {
+      showUpdateBanner('✨ Nova versão disponível', 'O site foi atualizado. Clique em Atualizar agora para carregar a versão nova.');
+    }
+  } catch {}
+}
+
+$('accountButton')?.addEventListener('click', () => openAuthModal(false));
+$('accountLogoutQuick')?.addEventListener('click', logoutAccount);
+$('authLogout')?.addEventListener('click', logoutAccount);
+$('authLoginTab')?.addEventListener('click', () => setAuthMode('login'));
+$('authRegisterTab')?.addEventListener('click', () => setAuthMode('register'));
+$('authSubmit')?.addEventListener('click', submitAuth);
+$('authPassword')?.addEventListener('keydown', (event) => { if (event.key === 'Enter' && state.authMode === 'login') submitAuth(); });
+$('authPasswordConfirm')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') submitAuth(); });
+$('closeAuth')?.addEventListener('click', closeAuthModal);
+$('authModal')?.addEventListener('click', (event) => { if (event.target.dataset.closeAuth) closeAuthModal(); });
+$('reloadSite')?.addEventListener('click', () => location.reload());
+
+socket.on('app-version', ({ version }) => {
+  if (!version) return;
+  if (!state.appVersion) state.appVersion = version;
+  else if (state.appVersion !== version) showUpdateBanner('✨ Nova versão disponível', 'O servidor mudou de versão. Atualize a página para continuar.');
+});
+socket.on('disconnect', () => {
+  if (!state.suppressDisconnectBanner) showUpdateBanner('⚠ Conexão perdida', 'O servidor caiu ou está reiniciando. Clique em Atualizar agora após alguns segundos.', true);
+});
+socket.on('connect', () => {
+  if (!state.suppressDisconnectBanner) checkAppVersion();
+});
+socket.on('connect_error', () => {
+  if (!state.suppressDisconnectBanner) showUpdateBanner('⚠ Servidor indisponível', 'Não foi possível conectar. Aguarde alguns segundos e clique em Atualizar agora.', true);
+});
+
+setInterval(checkAppVersion, 30000);
+
 function normalizeCode(value) {
   const raw = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
   if (raw.length <= 4) return raw;
   return `${raw.slice(0, 4)}-${raw.slice(4, 8)}`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[char]));
 }
 
 function initials(name) {
@@ -383,8 +596,8 @@ $('prejoinNickname').addEventListener('input', () => {
 });
 
 function openCreateModal() {
-  const nickname = $('landingNickname').value.trim();
-  if (!nickname) return showToast('Digite seu nickname primeiro.');
+  if (!ensureLoggedIn()) return;
+  const nickname = state.account.username;
   state.selectedVisibility = 'public';
   updateVisibilityModal();
   $('createModal').classList.remove('hidden');
@@ -423,7 +636,8 @@ document.querySelectorAll('.visibility-option').forEach((button) => {
 });
 
 $('createRoomConfirm').addEventListener('click', async () => {
-  const nickname = $('landingNickname').value.trim();
+  if (!ensureLoggedIn()) return;
+  const nickname = state.account.username;
   const password = $('createPassword').value;
   if (!nickname) return showToast('Digite seu nickname.');
   if (state.selectedVisibility === 'private' && password.length < 4) {
@@ -451,6 +665,7 @@ $('createRoomConfirm').addEventListener('click', async () => {
 });
 
 async function openPrejoin(code) {
+  if (!ensureLoggedIn()) return;
   const clean = normalizeCode(code);
   if (clean.length !== 9) return showToast('Digite um código válido.');
 
@@ -473,13 +688,14 @@ async function openPrejoin(code) {
   $('enterRoom').textContent = roomOpen ? 'Entrar na sala →' : 'Sala fechada';
   $('passwordField').classList.toggle('hidden', !info.requiresPassword);
   $('roomPassword').value = '';
-  $('prejoinNickname').value = $('landingNickname').value || state.nickname;
+  $('prejoinNickname').value = state.account?.username || state.nickname;
   updateNicknamePreview();
   updateAvatarUI();
   setView('prejoin');
 }
 
 $('goToRoom').addEventListener('click', () => {
+  if (!ensureLoggedIn()) return;
   const code = normalizeCode($('roomCodeInput').value);
   if (code.length !== 9) return showToast('Digite o código completo da sala.');
   history.pushState({}, '', `/room/${code}`);
@@ -493,10 +709,10 @@ $('roomCodeInput').addEventListener('keydown', (event) => {
 });
 
 $('enterRoom').addEventListener('click', async () => {
+  if (!ensureLoggedIn()) return;
   if (!state.room) return;
   if (state.room.isOpen === false) return showToast('Essa sala está fechada pelo dono.');
-  const nickname = $('prejoinNickname').value.trim();
-  if (!nickname) return showToast('Digite seu nickname.');
+  const nickname = state.account.username;
 
   $('enterRoom').disabled = true;
   const result = await new Promise((resolve) => socket.emit('join-room', {
@@ -527,7 +743,7 @@ function enterActiveRoom(result) {
   state.participants = result.participants || [];
   state.chatMessages = result.chatMessages || [];
   state.unreadChat = 0;
-  state.sharerId = result.sharerId || null;
+  state.sharerIds = new Set(result.sharerIds || []);
   setView('room');
   renderRoom();
   renderChatHistory();
@@ -1159,16 +1375,101 @@ function makePeerConnection() {
   return new RTCPeerConnection({ iceServers: config.iceServers });
 }
 
-function syncStageAudio() {
-  const video = $('stageVideo');
-  if (!video) return;
-  const localPreview = state.isSharing || state.sharerId === state.me;
-  const shouldMute = localPreview || state.remoteAudioMuted || state.transmissionVolume <= 0;
-  video.muted = shouldMute;
-  video.defaultMuted = shouldMute;
-  video.volume = shouldMute ? 0 : state.transmissionVolume;
-  if (shouldMute) video.setAttribute('muted', '');
-  else video.removeAttribute('muted');
+function remoteSharerIds() {
+  return [...state.sharerIds].filter((id) => id !== state.me);
+}
+
+function streamCardFor(sharerId) {
+  return document.querySelector(`.stream-card[data-sharer-id="${CSS.escape(sharerId)}"]`);
+}
+
+function streamVideoFor(sharerId) {
+  return streamCardFor(sharerId)?.querySelector('.stream-video') || null;
+}
+
+function participantName(id) {
+  return state.participants.find((p) => p.id === id)?.nickname || (id === state.me ? state.nickname : 'Participante');
+}
+
+function ensureStreamCard(sharerId) {
+  let card = streamCardFor(sharerId);
+  if (card) return card;
+
+  const isLocal = sharerId === state.me;
+  card = document.createElement('article');
+  card.className = `stream-card${isLocal ? ' local-stream-card' : ''}`;
+  card.dataset.sharerId = sharerId;
+  card.innerHTML = `
+    <div class="stream-card-head">
+      <div class="stream-owner">
+        <i class="stream-live-dot"></i>
+        <strong class="stream-owner-name"></strong>
+        <small>${isLocal ? 'VOCÊ' : 'AO VIVO'}</small>
+      </div>
+      <div class="stream-actions">
+        ${isLocal ? '' : '<button class="stream-action stream-audio-toggle" type="button">🔊 Som ON</button>'}
+        <button class="stream-action stream-fullscreen" type="button">⛶ Tela cheia</button>
+      </div>
+    </div>
+    <div class="stream-video-wrap">
+      <video class="stream-video" autoplay playsinline ${isLocal ? 'muted' : ''}></video>
+      <div class="stream-connecting"><div class="spinner"></div><span>Conectando transmissão...</span></div>
+    </div>
+  `;
+
+  const audioButton = card.querySelector('.stream-audio-toggle');
+  if (audioButton) {
+    audioButton.addEventListener('click', () => {
+      if (state.mutedSharers.has(sharerId)) state.mutedSharers.delete(sharerId);
+      else state.mutedSharers.add(sharerId);
+      syncTransmissionAudio();
+      updateStreamAudioButtons();
+    });
+  }
+
+  card.querySelector('.stream-fullscreen')?.addEventListener('click', () => {
+    card.querySelector('.stream-video')?.requestFullscreen?.();
+  });
+
+  $('streamsGrid').appendChild(card);
+  return card;
+}
+
+function removeStreamCard(sharerId) {
+  const card = streamCardFor(sharerId);
+  if (card) {
+    const video = card.querySelector('.stream-video');
+    if (video) video.srcObject = null;
+    card.remove();
+  }
+  state.mutedSharers.delete(sharerId);
+}
+
+function updateStreamAudioButtons() {
+  for (const sharerId of remoteSharerIds()) {
+    const button = streamCardFor(sharerId)?.querySelector('.stream-audio-toggle');
+    if (!button) continue;
+    const muted = state.remoteAudioMuted || state.mutedSharers.has(sharerId) || state.transmissionVolume <= 0;
+    button.textContent = muted ? '🔇 Som OFF' : '🔊 Som ON';
+    button.classList.toggle('muted', muted);
+  }
+}
+
+function syncTransmissionAudio() {
+  document.querySelectorAll('.stream-card').forEach((card) => {
+    const sharerId = card.dataset.sharerId;
+    const video = card.querySelector('.stream-video');
+    if (!video) return;
+    const local = sharerId === state.me;
+    const muted = local || state.remoteAudioMuted || state.mutedSharers.has(sharerId) || state.transmissionVolume <= 0;
+    video.muted = muted;
+    video.defaultMuted = muted;
+    video.volume = muted ? 0 : state.transmissionVolume;
+    if (muted) video.setAttribute('muted', '');
+    else video.removeAttribute('muted');
+    if (!muted) video.play().catch(() => {});
+  });
+  updateStreamAudioButtons();
 }
 
 function syncVoiceOutputVolume() {
@@ -1209,8 +1510,8 @@ function updateMixerUI() {
 function setTransmissionVolume(value) {
   state.transmissionVolume = Math.min(1, Math.max(0, Number(value) || 0));
   localStorage.setItem('lnz_transmission_volume', String(state.transmissionVolume));
-  if (state.transmissionVolume > 0 && state.sharerId !== state.me) state.remoteAudioMuted = false;
-  syncStageAudio();
+  if (state.transmissionVolume > 0) state.remoteAudioMuted = false;
+  syncTransmissionAudio();
   updateMixerUI();
   updateAudioControl();
 }
@@ -1224,6 +1525,14 @@ function setVoiceVolume(value) {
   updateMixerUI();
 }
 
+async function flushScreenIce(map, key, pc) {
+  const queued = map.get(key) || [];
+  map.delete(key);
+  for (const candidate of queued) {
+    try { await pc.addIceCandidate(candidate); } catch {}
+  }
+}
+
 async function createOutboundPeer(viewerId) {
   if (!state.localStream || !state.isSharing || viewerId === state.me) return;
   state.outboundPeers.get(viewerId)?.close();
@@ -1234,7 +1543,7 @@ async function createOutboundPeer(viewerId) {
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
-      socket.emit('signal', { target: viewerId, data: { type: 'ice', candidate: event.candidate } });
+      socket.emit('signal', { target: viewerId, data: { type: 'ice', shareId: state.me, candidate: event.candidate } });
     }
   };
   pc.onconnectionstatechange = () => {
@@ -1246,13 +1555,26 @@ async function createOutboundPeer(viewerId) {
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  socket.emit('signal', { target: viewerId, data: { type: 'offer', sdp: pc.localDescription } });
+  socket.emit('signal', { target: viewerId, data: { type: 'offer', shareId: state.me, sdp: pc.localDescription } });
+}
+
+function closeInboundPeer(sharerId) {
+  const pc = state.inboundPeers.get(sharerId);
+  if (pc) pc.close();
+  state.inboundPeers.delete(sharerId);
+  state.inboundStreams.delete(sharerId);
+  state.screenPendingInboundIce.delete(sharerId);
+  removeStreamCard(sharerId);
+}
+
+function closeAllInboundPeers() {
+  for (const sharerId of [...state.inboundPeers.keys()]) closeInboundPeer(sharerId);
 }
 
 async function startSharing() {
   if (!state.room) return;
+  if (!state.account) return openAuthModal(true);
   if (state.isSharing) return stopSharing();
-  if (state.sharerId && state.sharerId !== state.me) return showToast('Outra pessoa já está compartilhando a tela.');
   if (!navigator.mediaDevices?.getDisplayMedia) return showToast('Seu navegador não permite compartilhar tela.');
 
   try {
@@ -1271,7 +1593,7 @@ async function startSharing() {
     });
 
     if (state.shareAudio && stream.getAudioTracks().length === 0) {
-      showToast('Nenhum áudio foi capturado. Se quiser som, marque a opção de áudio na janela do navegador ao escolher o que compartilhar.');
+      showToast('Nenhum áudio foi capturado. Se quiser som, marque a opção de áudio na janela do navegador.');
     }
 
     const result = await new Promise((resolve) => socket.emit('start-sharing', {}, resolve));
@@ -1282,10 +1604,13 @@ async function startSharing() {
 
     state.localStream = stream;
     state.isSharing = true;
-    state.sharerId = state.me;
-    const localPreview = $('stageVideo');
-    localPreview.srcObject = stream;
-    syncStageAudio();
+    state.sharerIds.add(state.me);
+    const card = ensureStreamCard(state.me);
+    const video = card.querySelector('.stream-video');
+    video.srcObject = stream;
+    video.muted = true;
+    video.defaultMuted = true;
+    card.querySelector('.stream-connecting')?.classList.add('hidden');
     stream.getVideoTracks()[0]?.addEventListener('ended', () => stopSharing(), { once: true });
 
     updateStage();
@@ -1300,11 +1625,7 @@ async function startSharing() {
 function closeOutboundPeers() {
   for (const pc of state.outboundPeers.values()) pc.close();
   state.outboundPeers.clear();
-}
-
-function closeInboundPeer() {
-  state.inboundPeer?.close();
-  state.inboundPeer = null;
+  state.screenPendingOutboundIce.clear();
 }
 
 function stopSharing(notifyServer = true) {
@@ -1313,44 +1634,66 @@ function stopSharing(notifyServer = true) {
   state.localStream?.getTracks().forEach((track) => track.stop());
   state.localStream = null;
   state.isSharing = false;
-  if (state.sharerId === state.me) state.sharerId = null;
-  const stageVideo = $('stageVideo');
-  stageVideo.srcObject = null;
-  syncStageAudio();
+  state.sharerIds.delete(state.me);
+  removeStreamCard(state.me);
   updateStage();
 }
 
+function renderStreamsStage() {
+  const active = new Set(state.sharerIds);
+  if (state.isSharing && state.me) active.add(state.me);
+
+  document.querySelectorAll('.stream-card').forEach((card) => {
+    const id = card.dataset.sharerId;
+    if (!active.has(id)) removeStreamCard(id);
+  });
+
+  for (const sharerId of active) {
+    const card = ensureStreamCard(sharerId);
+    const nameEl = card.querySelector('.stream-owner-name');
+    if (nameEl) nameEl.textContent = participantName(sharerId);
+    if (sharerId === state.me && state.localStream) {
+      const video = card.querySelector('.stream-video');
+      if (video.srcObject !== state.localStream) video.srcObject = state.localStream;
+      card.querySelector('.stream-connecting')?.classList.add('hidden');
+    } else {
+      const stream = state.inboundStreams.get(sharerId);
+      const video = card.querySelector('.stream-video');
+      if (stream && video.srcObject !== stream) {
+        video.srcObject = stream;
+        card.querySelector('.stream-connecting')?.classList.add('hidden');
+        video.play().catch(() => {});
+      }
+    }
+  }
+
+  const count = active.size;
+  $('emptyStage').classList.toggle('hidden', count > 0);
+  $('videoStage').classList.toggle('hidden', count === 0);
+  $('streamsGrid').classList.toggle('single-stream', count === 1);
+  $('sharingLabel').textContent = count === 1 ? '1 transmissão ao vivo' : `${count} transmissões ao vivo`;
+  $('sharingCountLabel').textContent = `${count} AO VIVO`;
+  syncTransmissionAudio();
+}
+
 function updateStage() {
-  syncStageAudio();
-  const hasShare = Boolean(state.sharerId || state.isSharing);
-  $('emptyStage').classList.toggle('hidden', hasShare);
-  $('videoStage').classList.toggle('hidden', !hasShare);
+  renderStreamsStage();
   $('shareControl').textContent = state.isSharing ? '■ Parar transmissão' : '▣ Compartilhar tela';
   $('shareControl').classList.toggle('stop-control', state.isSharing);
-  $('shareFromEmpty').disabled = Boolean(state.sharerId && state.sharerId !== state.me);
+  $('shareFromEmpty').disabled = false;
   updateAudioControl();
-
-  if (state.isSharing) {
-    const stageVideo = $('stageVideo');
-    syncStageAudio();
-    $('sharingLabel').textContent = 'Você está compartilhando sua tela';
-    $('videoConnecting').classList.add('hidden');
-  } else if (state.sharerId) {
-    const sharer = state.participants.find((p) => p.id === state.sharerId);
-    $('sharingLabel').textContent = `${sharer?.nickname || 'Alguém'} está compartilhando`;
-    if (!$('stageVideo').srcObject) $('videoConnecting').classList.remove('hidden');
-  }
 }
 
 function updateAudioControl() {
   const button = $('audioControl');
   if (!button) return;
 
-  if (state.sharerId && state.sharerId !== state.me && !state.isSharing) {
+  const remoteCount = remoteSharerIds().length;
+  if (remoteCount > 0) {
     button.disabled = false;
-    button.textContent = state.remoteAudioMuted ? '🔇 Transmissão OFF' : '🔊 Transmissão ON';
+    button.textContent = state.remoteAudioMuted ? '🔇 Transmissões OFF' : '🔊 Transmissões ON';
     button.classList.toggle('audio-on', !state.remoteAudioMuted);
-    button.title = 'Você controla o som da transmissão somente no seu navegador.';
+    button.title = 'Liga ou desliga o áudio das transmissões que você está assistindo.';
     return;
   }
 
@@ -1366,15 +1709,15 @@ function updateAudioControl() {
   button.disabled = false;
   button.textContent = state.shareAudio ? '🔊 Enviar áudio ON' : '🔇 Enviar áudio OFF';
   button.classList.toggle('audio-on', state.shareAudio);
-  button.title = 'Ative antes de compartilhar. O navegador pode permitir som da tela inteira, janela ou aba, dependendo do sistema.';
+  button.title = 'Ative antes de compartilhar.';
 }
 
 $('audioControl').addEventListener('click', () => {
-  if (state.sharerId && state.sharerId !== state.me && !state.isSharing) {
+  if (remoteSharerIds().length > 0) {
     state.remoteAudioMuted = !state.remoteAudioMuted;
-    syncStageAudio();
-    $('stageVideo').play?.().catch(() => {});
+    syncTransmissionAudio();
     updateAudioControl();
+    updateMixerUI();
     return;
   }
   if (state.isSharing) return;
@@ -1391,7 +1734,7 @@ $('transmissionVolume')?.addEventListener('input', (event) => setTransmissionVol
 $('voiceVolume')?.addEventListener('input', (event) => setVoiceVolume(Number(event.target.value) / 100));
 $('mixerToggleTransmission')?.addEventListener('click', () => {
   state.remoteAudioMuted = !state.remoteAudioMuted;
-  syncStageAudio();
+  syncTransmissionAudio();
   updateAudioControl();
   updateMixerUI();
 });
@@ -1405,63 +1748,69 @@ $('mixerToggleVoice')?.addEventListener('click', () => {
 $('shareFromEmpty').addEventListener('click', startSharing);
 $('shareControl').addEventListener('click', startSharing);
 $('fullscreenControl').addEventListener('click', () => {
-  const video = $('stageVideo');
-  if (!video.srcObject) return showToast('Não há transmissão na tela.');
-  video.requestFullscreen?.();
+  if (state.sharerIds.size === 0 && !state.isSharing) return showToast('Não há transmissão na tela.');
+  $('videoStage').requestFullscreen?.();
 });
 
 async function leaveRoom() {
   if (!state.room) return;
   await leaveVoiceCall(true);
   stopSharing(true);
-  closeInboundPeer();
-  $('stageVideo').srcObject = null;
+  closeAllInboundPeers();
   await new Promise((resolve) => socket.emit('leave-room', {}, resolve));
   state.room = null;
   state.me = null;
   state.participants = [];
   state.chatMessages = [];
   state.unreadChat = 0;
+  state.sharerIds.clear();
+  state.inboundStreams.clear();
   clearSelectedChatFile();
   closeChat();
   updateChatUnread();
-  state.sharerId = null;
+  $('streamsGrid').innerHTML = '';
   history.pushState({}, '', '/');
   setView('landing');
   loadPublicRooms();
 }
 $('leaveControl').addEventListener('click', leaveRoom);
 
-socket.on('room-state', ({ room, participants, sharerId }) => {
+socket.on('room-state', ({ room, participants, sharerIds }) => {
   if (!state.room || room.code !== state.room.code) return;
   state.room = room;
   state.participants = participants || [];
-  state.sharerId = sharerId || null;
+  state.sharerIds = new Set(sharerIds || []);
+  if (state.isSharing && state.me) state.sharerIds.add(state.me);
+
+  for (const id of [...state.inboundPeers.keys()]) {
+    if (!state.sharerIds.has(id)) closeInboundPeer(id);
+  }
   renderRoom();
   updateStage();
   updateVoiceControls();
 });
 
 socket.on('sharing-started', ({ sharerId }) => {
-  if (!state.room) return;
-  state.sharerId = sharerId;
-  if (sharerId !== state.me) {
-    const stageVideo = $('stageVideo');
-    stageVideo.srcObject = null;
-    state.remoteAudioMuted = false;
-    syncStageAudio();
-    $('videoConnecting').classList.remove('hidden');
-  }
+  if (!state.room || !sharerId) return;
+  state.sharerIds.add(sharerId);
+  if (sharerId !== state.me) ensureStreamCard(sharerId);
   updateStage();
 });
 
-socket.on('sharing-stopped', () => {
-  if (!state.room) return;
-  if (!state.isSharing) {
-    closeInboundPeer();
-    $('stageVideo').srcObject = null;
+socket.on('sharing-stopped', ({ sharerId }) => {
+  if (!state.room || !sharerId) return;
+  state.sharerIds.delete(sharerId);
+  if (sharerId === state.me) {
+    if (state.isSharing) {
+      state.localStream?.getTracks().forEach((track) => track.stop());
+      state.localStream = null;
+      state.isSharing = false;
+      closeOutboundPeers();
+    }
+    removeStreamCard(sharerId);
+  } else {
+    closeInboundPeer(sharerId);
   }
-  state.sharerId = state.isSharing ? state.me : null;
   updateStage();
 });
 
@@ -1473,55 +1822,83 @@ socket.on('viewer-left', ({ viewerId }) => {
   const pc = state.outboundPeers.get(viewerId);
   if (pc) pc.close();
   state.outboundPeers.delete(viewerId);
+  state.screenPendingOutboundIce.delete(viewerId);
 });
 
 socket.on('signal', async ({ from, data }) => {
   try {
+    const shareId = data?.shareId;
+    if (!shareId || !from || !data?.type) return;
+
     if (data.type === 'offer') {
-      // O transmissor nunca deve receber/reproduzir uma transmissão de volta.
-      if (state.isSharing || state.sharerId === state.me || from === state.me) return;
-      closeInboundPeer();
+      if (shareId !== from || from === state.me) return;
+      closeInboundPeer(shareId);
       const pc = makePeerConnection();
-      state.inboundPeer = pc;
+      state.inboundPeers.set(shareId, pc);
+      ensureStreamCard(shareId);
 
       pc.onicecandidate = (event) => {
-        if (event.candidate) socket.emit('signal', { target: from, data: { type: 'ice', candidate: event.candidate } });
+        if (event.candidate) socket.emit('signal', { target: from, data: { type: 'ice', shareId, candidate: event.candidate } });
       };
       pc.ontrack = (event) => {
-        if (state.isSharing || state.sharerId === state.me) return;
-        const stageVideo = $('stageVideo');
-        stageVideo.srcObject = event.streams[0];
-        state.remoteAudioMuted = false;
-        syncStageAudio();
-        stageVideo.play?.().catch(() => {});
-        $('videoConnecting').classList.add('hidden');
+        const stream = event.streams?.[0];
+        if (!stream) return;
+        state.inboundStreams.set(shareId, stream);
+        state.sharerIds.add(shareId);
+        const card = ensureStreamCard(shareId);
+        const video = card.querySelector('.stream-video');
+        video.srcObject = stream;
+        card.querySelector('.stream-connecting')?.classList.add('hidden');
+        syncTransmissionAudio();
+        video.play().catch(() => {});
+        updateStage();
       };
       pc.onconnectionstatechange = () => {
         if (['failed', 'closed'].includes(pc.connectionState)) {
-          $('videoConnecting').classList.remove('hidden');
+          const card = streamCardFor(shareId);
+          card?.querySelector('.stream-connecting')?.classList.remove('hidden');
         }
       };
 
       await pc.setRemoteDescription(data.sdp);
-      await flushVoiceIce(from, pc);
+      await flushScreenIce(state.screenPendingInboundIce, shareId, pc);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      socket.emit('signal', { target: from, data: { type: 'answer', sdp: pc.localDescription } });
+      socket.emit('signal', { target: from, data: { type: 'answer', shareId, sdp: pc.localDescription } });
       return;
     }
 
     if (data.type === 'answer') {
+      if (shareId !== state.me) return;
       const pc = state.outboundPeers.get(from);
-      if (pc) await pc.setRemoteDescription(data.sdp);
+      if (pc) {
+        await pc.setRemoteDescription(data.sdp);
+        await flushScreenIce(state.screenPendingOutboundIce, from, pc);
+      }
       return;
     }
 
     if (data.type === 'ice' && data.candidate) {
-      const pc = state.isSharing ? state.outboundPeers.get(from) : state.inboundPeer;
-      if (pc) await pc.addIceCandidate(data.candidate);
+      if (shareId === state.me) {
+        const pc = state.outboundPeers.get(from);
+        if (pc?.remoteDescription) await pc.addIceCandidate(data.candidate);
+        else {
+          const queued = state.screenPendingOutboundIce.get(from) || [];
+          queued.push(data.candidate);
+          state.screenPendingOutboundIce.set(from, queued);
+        }
+      } else if (shareId === from) {
+        const pc = state.inboundPeers.get(shareId);
+        if (pc?.remoteDescription) await pc.addIceCandidate(data.candidate);
+        else {
+          const queued = state.screenPendingInboundIce.get(shareId) || [];
+          queued.push(data.candidate);
+          state.screenPendingInboundIce.set(shareId, queued);
+        }
+      }
     }
   } catch {
-    showToast('Falha na conexão da transmissão.');
+    showToast('Falha na conexão de uma transmissão.');
   }
 });
 
@@ -1534,7 +1911,7 @@ function renderPublicRooms(rooms) {
     const card = document.createElement('button');
     card.className = 'public-room-card';
     card.innerHTML = `
-      <div class="public-room-top"><span class="public-dot"></span><strong>${room.code}</strong><em>${room.sharing ? 'AO VIVO' : 'ABERTA'}</em></div>
+      <div class="public-room-top"><span class="public-dot"></span><strong>${room.code}</strong><em>${room.sharing ? `${room.sharingCount || 1} TELA${(room.sharingCount || 1) === 1 ? '' : 'S'} AO VIVO` : 'ABERTA'}</em></div>
       <div class="public-room-bottom"><span>♙ ${room.participants} participante${room.participants === 1 ? '' : 's'}</span><b>Entrar →</b></div>
     `;
     card.addEventListener('click', () => {
@@ -1575,6 +1952,52 @@ async function routeFromLocation() {
 }
 
 
+
+function renderPublicFeedbacks(items = []) {
+  const list = $('publicFeedbackList');
+  if (!list) return;
+  list.innerHTML = '';
+  $('publicFeedbackEmpty')?.classList.toggle('hidden', items.length > 0);
+  const count = items.length;
+  const avg = count ? items.reduce((sum, item) => sum + Number(item.rating || 0), 0) / count : 0;
+  if ($('publicFeedbackAverage')) $('publicFeedbackAverage').textContent = count ? avg.toFixed(1) : '—';
+  if ($('publicFeedbackCount')) $('publicFeedbackCount').textContent = String(count);
+  for (const item of items) {
+    const card = document.createElement('div');
+    card.className = 'public-feedback-item';
+    const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString('pt-BR') : '';
+    card.innerHTML = `<div class="public-feedback-item-head"><strong>${escapeHtml(item.nickname || 'Usuário LNZ')}</strong><span>${'★'.repeat(Math.max(1, Math.min(5, Number(item.rating || 5))))}</span></div><p></p><small>${escapeHtml(item.type || 'feedback')} ${date ? `• ${escapeHtml(date)}` : ''}</small>`;
+    card.querySelector('p').textContent = item.message || '';
+    list.appendChild(card);
+  }
+}
+
+async function loadPublicFeedbacks() {
+  try {
+    const result = await new Promise((resolve) => socket.emit('list-public-feedback', resolve));
+    if (result?.ok) renderPublicFeedbacks(result.feedbacks || []);
+  } catch {}
+}
+
+function openPublicFeedbackModal() {
+  $('publicFeedbackModal')?.classList.remove('hidden');
+  $('publicFeedbackModal')?.setAttribute('aria-hidden', 'false');
+  loadPublicFeedbacks();
+}
+
+function closePublicFeedbackModal() {
+  $('publicFeedbackModal')?.classList.add('hidden');
+  $('publicFeedbackModal')?.setAttribute('aria-hidden', 'true');
+}
+
+$('heroFeedbacks')?.addEventListener('click', openPublicFeedbackModal);
+$('refreshPublicFeedback')?.addEventListener('click', loadPublicFeedbacks);
+$('closePublicFeedback')?.addEventListener('click', closePublicFeedbackModal);
+$('publicFeedbackModal')?.addEventListener('click', (event) => { if (event.target.dataset.closePublicFeedback) closePublicFeedbackModal(); });
+$('writeFeedbackFromPublic')?.addEventListener('click', () => { closePublicFeedbackModal(); openFeedbackModal(); });
+socket.on('public-feedback-updated', (items) => renderPublicFeedbacks(items || []));
+socket.on('public-feedback-added', () => loadPublicFeedbacks());
+
 const feedbackButton = $('feedbackButton');
 if (feedbackButton) feedbackButton.addEventListener('click', openFeedbackModal);
 $('heroSendFeedback').addEventListener('click', openFeedbackModal);
@@ -1602,10 +2025,17 @@ $('feedbackMessage').addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') submitFeedback();
 });
 
-$('year').textContent = new Date().getFullYear();
-updateAudioControl();
-applyDiscordLinks();
-applyIdentityToUI();
-updateVoiceControls();
-loadPublicRooms();
-routeFromLocation();
+async function initApp() {
+  $('year').textContent = new Date().getFullYear();
+  updateAudioControl();
+  updateMixerUI();
+  applyDiscordLinks();
+  applyIdentityToUI();
+  updateVoiceControls();
+  await checkAppVersion();
+  await loadAccount();
+  await loadPublicRooms();
+  if (state.account) await routeFromLocation();
+}
+
+initApp();

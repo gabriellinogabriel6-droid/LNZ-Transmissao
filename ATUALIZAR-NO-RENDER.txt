@@ -1,32 +1,34 @@
 LNZ TRANSMISSÃO - ATUALIZAÇÃO
 
-1. No GitHub, substitua estes arquivos/pastas pela versão deste ZIP:
-   server.js
-   public/app.js
-   public/index.html
-   public/style.css
-   public/assets/background-app.png
-   README.md
-   .env.example
+1) No GitHub, substitua estes arquivos/pastas pelo conteúdo desta versão:
+   - server.js
+   - package.json
+   - public/
+   - README.md
+   - .env.example (opcional, serve de referência)
 
-2. Confirme as alterações (Commit changes).
+2) Faça Commit changes.
 
-3. No Render > seu serviço > Environment, adicione:
-   FEEDBACK_WEBHOOK_URL = o webhook do Discord que você quer usar
-   DISCORD_URL = https://discord.gg/m67kQeZrns
+3) No Render, abra o Web Service.
 
-4. NÃO coloque o webhook dentro do GitHub.
+4) IMPORTANTE - BANCO DE DADOS:
+   Crie um PostgreSQL no Render e copie a Internal Database URL.
+   Em Web Service > Environment, crie:
+   DATABASE_URL = URL_INTERNA_DO_POSTGRES
 
-5. Espere o Render fazer o deploy. Se não fizer:
-   Manual Deploy > Deploy latest commit
+5) Mantenha também, se já usa:
+   DISCORD_URL=https://discord.gg/m67kQeZrns
+   FEEDBACK_WEBHOOK_URL=seu_webhook (somente no Render)
 
-6. Abra o site e use Ctrl + F5.
+6) Faça Manual Deploy > Deploy latest commit, caso não inicie sozinho.
 
-NOVO NESTA VERSÃO:
-- Call de voz com microfone ON/OFF.
-- Chat e envio de arquivos.
-- Ajuste completo da foto/avatar.
-- Fundo LNZ animado.
-- Feedback para Discord via variável do Render.
-- Dono pode abrir/fechar a entrada da sala.
-- Áudio opcional da aba na transmissão sem retorno no player do transmissor.
+7) Quando aparecer Live, abra o site. Se o navegador estiver em versão antiga, o próprio site mostrará o botão Atualizar agora.
+
+NOVIDADES:
+- Login obrigatório.
+- Usuário único no banco.
+- Senha protegida por hash.
+- Sessão persistente.
+- Aviso de atualização/queda.
+- Várias pessoas podem transmitir a tela ao mesmo tempo.
+- Cada transmissão aparece separada e tem controle de som para quem assiste.

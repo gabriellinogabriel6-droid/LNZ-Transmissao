@@ -100,3 +100,38 @@ Importante:
 
 - O botão **Enviar feedback** foi removido da lateral/rodapé da sala.
 - Agora **Feedbacks** e **Enviar feedback** ficam no **menu principal / tela inicial**.
+
+
+# Atualização: login obrigatório + várias transmissões
+
+## Conta obrigatória
+
+- Para usar as salas, a pessoa precisa **criar conta ou fazer login**.
+- Cada login é único: duas pessoas **não conseguem cadastrar o mesmo nome de usuário**, inclusive mudando apenas maiúsculas/minúsculas.
+- Senhas não são guardadas em texto; ficam protegidas com hash no servidor.
+- A sessão fica salva em cookie seguro por até 30 dias.
+- O nickname dentro das salas passa a ser o próprio login da conta.
+
+## PostgreSQL no Render
+
+Para as contas continuarem existindo após reiniciar ou atualizar o site, crie um banco **PostgreSQL** no Render e adicione ao Web Service a variável:
+
+```env
+DATABASE_URL=URL_INTERNA_DO_POSTGRES
+```
+
+O servidor cria automaticamente as tabelas `users`, `sessions` e `feedbacks`. Sem `DATABASE_URL`, existe um modo temporário em memória apenas para testes; ele apaga as contas quando o servidor reinicia.
+
+## Atualização e queda do servidor
+
+- O navegador verifica a versão do site automaticamente.
+- Quando uma versão nova é publicada, aparece **Nova versão disponível** com botão **Atualizar agora**.
+- Se o Render cair/reiniciar ou a conexão for perdida, aparece **Conexão perdida** e o mesmo botão para recarregar.
+
+## Várias pessoas compartilhando tela
+
+- A aplicação **não impõe um número fixo de transmissores por sala**.
+- Vários participantes podem apertar **Compartilhar tela** ao mesmo tempo.
+- Cada tela aparece em um card separado na grade de transmissões.
+- Cada espectador pode ligar/desligar o som de cada transmissão e usar o Mix de volume.
+- O limite real depende da internet, CPU/memória dos dispositivos, navegador e TURN/WebRTC; portanto não existe garantia prática de quantidade infinita.
