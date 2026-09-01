@@ -8,7 +8,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: true, credentials: true },
-  maxHttpBufferSize: 1e6
+  maxHttpBufferSize: 6e6
 });
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -35,7 +35,11 @@ app.get('/config.js', (_req, res) => {
   }
 
   res.type('application/javascript').send(
-    `window.LNZ_CONFIG = ${JSON.stringify({ iceServers })};`
+    `window.LNZ_CONFIG = ${JSON.stringify({ 
+      iceServers,
+      discordUrl: process.env.DISCORD_URL || 'https://discord.gg/m67kQeZrns',
+      brandName: process.env.BRAND_NAME || 'LNZ Transmissão'
+    })};`
   );
 });
 
@@ -78,7 +82,77 @@ function cleanAvatar(value) {
 function cleanAvatarScale(value) {
   const scale = Number(value);
   if (!Number.isFinite(scale)) return 1;
-  return Math.min(1.8, Math.max(0.6, scale));
+  return Math.min(3, Math.max(0.5, scale));
+}
+
+const MAX_CHAT_TEXT = 1000;
+const MAX_CHAT_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_CHAT_HISTORY_BYTES = 12 * 1024 * 1024;
+const MAX_CHAT_HISTORY_ITEMS = 80;
+const CHAT_ALLOWED_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'webp', 'gif', 'pdf', 'txt', 'zip',
+  'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'
+]);
+const CHAT_BLOCKED_EXTENSIONS = new Set([
+  'exe', 'msi', 'bat', 'cmd', 'com', 'scr', 'ps1', 'vbs', 'js', 'mjs', 'html', 'htm', 'jar', 'apk'
+]);
+
+function cleanChatText(value) {
+  return String(value || '').replace(/\r\n/g, '\n').trim().slice(0, MAX_CHAT_TEXT);
+}
+
+function cleanFilename(value) {
+  return String(value || 'arquivo')
+    .replace(/[\\/\0]/g, '_')
+    .replace(/[<>:"|?*]/g, '_')
+    .trim()
+    .slice(0, 90) || 'arquivo';
+}
+
+function validateChatAttachment(value) {
+  if (!value || typeof value !== 'object') return { ok: true, attachment: null, bytes: 0 };
+  const name = cleanFilename(value.name);
+  const type = String(value.type || '').toLowerCase().slice(0, 100);
+  const size = Number(value.size || 0);
+  const data = String(value.data || '');
+  const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+
+  if (!ext || CHAT_BLOCKED_EXTENSIONS.has(ext) || !CHAT_ALLOWED_EXTENSIONS.has(ext)) {
+    return { ok: false, error: 'Esse tipo de arquivo não é permitido no chat.' };
+  }
+  if (!Number.isFinite(size) || size <= 0 || size > MAX_CHAT_FILE_BYTES) {
+    return { ok: false, error: 'O arquivo deve ter no máximo 2 MB.' };
+  }
+  if (!data.startsWith('data:') || !data.includes(';base64,')) {
+    return { ok: false, error: 'Arquivo inválido.' };
+  }
+  const expectedPrefix = type ? `data:${type};base64,` : 'data:';
+  if (type && !data.startsWith(expectedPrefix)) {
+    return { ok: false, error: 'O tipo do arquivo não confere.' };
+  }
+  if (data.length > 3_000_000) {
+    return { ok: false, error: 'O arquivo codificado ficou grande demais.' };
+  }
+
+  return { ok: true, attachment: { name, type, size, data }, bytes: data.length };
+}
+
+function addChatMessage(room, message, attachmentBytes = 0) {
+  if (!room.chatMessages) room.chatMessages = [];
+  if (!Number.isFinite(room.chatBytes)) room.chatBytes = 0;
+  message._attachmentBytes = attachmentBytes;
+  room.chatMessages.push(message);
+  room.chatBytes += attachmentBytes;
+
+  while (room.chatMessages.length > MAX_CHAT_HISTORY_ITEMS || room.chatBytes > MAX_CHAT_HISTORY_BYTES) {
+    const removed = room.chatMessages.shift();
+    room.chatBytes -= Number(removed?._attachmentBytes || 0);
+  }
+}
+
+function chatMessageView(message) {
+  const { _attachmentBytes, ...view } = message;
+  return view;
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
@@ -213,7 +287,9 @@ io.on('connection', (socket) => {
       hostId: socket.id,
       sharerId: null,
       createdAt: Date.now(),
-      participants: new Map()
+      participants: new Map(),
+      chatMessages: [],
+      chatBytes: 0
     };
 
     room.participants.set(socket.id, {
@@ -230,6 +306,7 @@ io.on('connection', (socket) => {
       ok: true,
       room: roomPublicView(room),
       participants: participantsFor(room),
+      chatMessages: room.chatMessages.map(chatMessageView),
       me: socket.id
     });
 
@@ -262,6 +339,7 @@ io.on('connection', (socket) => {
       ok: true,
       room: roomPublicView(room),
       participants: participantsFor(room),
+      chatMessages: room.chatMessages.map(chatMessageView),
       me: socket.id,
       sharerId: room.sharerId
     });
@@ -272,6 +350,43 @@ io.on('connection', (socket) => {
     if (room.sharerId && room.sharerId !== socket.id) {
       io.to(room.sharerId).emit('viewer-joined', { viewerId: socket.id });
     }
+  });
+
+  socket.on('send-chat-message', ({ text, attachment }, callback = () => {}) => {
+    const code = socket.data.roomCode;
+    const room = rooms.get(code);
+    const participant = room?.participants.get(socket.id);
+    if (!room || !participant) {
+      return callback({ ok: false, error: 'Você não está em uma sala.' });
+    }
+
+    const now = Date.now();
+    if (socket.data.lastChatAt && now - socket.data.lastChatAt < 450) {
+      return callback({ ok: false, error: 'Espere um instante antes de enviar outra mensagem.' });
+    }
+
+    const cleanText = cleanChatText(text);
+    const fileResult = validateChatAttachment(attachment);
+    if (!fileResult.ok) return callback({ ok: false, error: fileResult.error });
+    if (!cleanText && !fileResult.attachment) {
+      return callback({ ok: false, error: 'Digite uma mensagem ou escolha um arquivo.' });
+    }
+
+    socket.data.lastChatAt = now;
+    const message = {
+      id: crypto.randomUUID(),
+      senderId: socket.id,
+      nickname: participant.nickname,
+      avatar: participant.avatar || '',
+      avatarScale: cleanAvatarScale(participant.avatarScale),
+      text: cleanText,
+      attachment: fileResult.attachment,
+      createdAt: now
+    };
+
+    addChatMessage(room, message, fileResult.bytes);
+    io.to(code).emit('chat-message', chatMessageView(message));
+    callback({ ok: true, messageId: message.id });
   });
 
   socket.on('leave-room', (_payload, callback = () => {}) => {

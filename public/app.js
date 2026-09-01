@@ -1,24 +1,44 @@
 const socket = io();
 const config = window.LNZ_CONFIG || {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  discordUrl: '',
+  brandName: 'LNZ Transmissão'
 };
 
 const $ = (id) => document.getElementById(id);
 
 const state = {
   avatar: localStorage.getItem('lnz_avatar') || '',
-  avatarScale: Math.min(1.8, Math.max(0.6, Number(localStorage.getItem('lnz_avatar_scale') || 1))),
+  avatarScale: Math.min(3, Math.max(0.5, Number(localStorage.getItem('lnz_avatar_scale') || 1.35))),
   nickname: localStorage.getItem('lnz_nickname') || '',
   room: null,
   me: null,
   participants: [],
+  chatMessages: [],
+  selectedChatFile: null,
+  unreadChat: 0,
   selectedVisibility: 'public',
+  shareAudio: false,
   isSharing: false,
   localStream: null,
   sharerId: null,
   outboundPeers: new Map(),
   inboundPeer: null
 };
+
+function applyDiscordLinks() {
+  const links = ['discordButton', 'footerDiscordLink', 'roomDiscordLink'];
+  for (const id of links) {
+    const el = $(id);
+    if (!el) continue;
+    if (config.discordUrl) {
+      el.href = config.discordUrl;
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  }
+}
 
 function normalizeCode(value) {
   const raw = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
@@ -121,7 +141,7 @@ $('avatarInput').addEventListener('change', (event) => {
   const reader = new FileReader();
   reader.onload = () => {
     state.avatar = String(reader.result || '');
-    state.avatarScale = 1;
+    state.avatarScale = 1.35;
     persistAvatarState();
     updateAvatarUI();
   };
@@ -135,7 +155,7 @@ $('adjustAvatarLanding').addEventListener('click', openAvatarEditor);
 $('adjustAvatarPrejoin').addEventListener('click', openAvatarEditor);
 $('removeAvatarLanding').addEventListener('click', () => {
   state.avatar = '';
-  state.avatarScale = 1;
+  state.avatarScale = 1.35;
   persistAvatarState();
   updateAvatarUI();
   showToast('Foto removida.');
@@ -174,6 +194,9 @@ $('closeAvatarEditor').addEventListener('click', closeAvatarEditor);
 $('avatarEditorModal').addEventListener('click', (event) => {
   if (event.target.dataset.closeAvatarEditor) closeAvatarEditor();
 });
+$('avatarZoom').min = '0.5';
+$('avatarZoom').max = '3';
+$('avatarZoom').step = '0.05';
 $('avatarZoom').addEventListener('input', updateAvatarEditorPreview);
 $('changeAvatarFromEditor').addEventListener('click', pickAvatar);
 $('resetAvatarZoom').addEventListener('click', () => {
@@ -181,7 +204,7 @@ $('resetAvatarZoom').addEventListener('click', () => {
   updateAvatarEditorPreview();
 });
 $('saveAvatarEditor').addEventListener('click', () => {
-  state.avatarScale = Math.min(1.8, Math.max(0.6, Number($('avatarZoom').value || 1)));
+  state.avatarScale = Math.min(3, Math.max(0.5, Number($('avatarZoom').value || 1)));
   persistAvatarState();
   updateAvatarUI();
   closeAvatarEditor();
@@ -222,6 +245,10 @@ function updateVisibilityModal() {
 }
 
 $('openCreateRoom').addEventListener('click', openCreateModal);
+$('heroCreateRoom').addEventListener('click', () => {
+  document.getElementById('landingNickname').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(openCreateModal, 150);
+});
 $('closeCreateModal').addEventListener('click', closeCreateModal);
 $('createModal').addEventListener('click', (event) => {
   if (event.target.dataset.closeModal) closeCreateModal();
@@ -325,9 +352,13 @@ function enterActiveRoom(result) {
   state.room = result.room;
   state.me = result.me;
   state.participants = result.participants || [];
+  state.chatMessages = result.chatMessages || [];
+  state.unreadChat = 0;
   state.sharerId = result.sharerId || null;
   setView('room');
   renderRoom();
+  renderChatHistory();
+  updateChatUnread();
   updateStage();
 }
 
@@ -395,6 +426,267 @@ $('topRoomCode').addEventListener('click', () => copyText(state.room?.code || ''
 $('copyInvite').addEventListener('click', () => copyText(roomInviteLink(), 'Link'));
 $('copyInviteCenter').addEventListener('click', () => copyText(roomInviteLink(), 'Link'));
 
+const CHAT_MAX_FILE_SIZE = 2 * 1024 * 1024;
+const CHAT_ALLOWED_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'webp', 'gif', 'pdf', 'txt', 'zip',
+  'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'
+]);
+
+function formatFileSize(bytes) {
+  const value = Number(bytes || 0);
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatChatTime(timestamp) {
+  try {
+    return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp));
+  } catch {
+    return '';
+  }
+}
+
+function isChatDrawerMode() {
+  return window.matchMedia('(max-width: 1100px)').matches;
+}
+
+function isChatOpen() {
+  return !isChatDrawerMode() || $('chatPanel').classList.contains('open');
+}
+
+function openChat() {
+  $('chatPanel').classList.add('open');
+  state.unreadChat = 0;
+  updateChatUnread();
+  setTimeout(() => $('chatInput').focus(), 50);
+  scrollChatToBottom();
+}
+
+function closeChat() {
+  $('chatPanel').classList.remove('open');
+}
+
+function updateChatUnread() {
+  const badge = $('chatUnread');
+  if (!badge) return;
+  badge.textContent = state.unreadChat > 99 ? '99+' : String(state.unreadChat);
+  badge.classList.toggle('hidden', state.unreadChat <= 0);
+}
+
+function scrollChatToBottom() {
+  const container = $('chatMessages');
+  if (container) container.scrollTop = container.scrollHeight;
+}
+
+function renderChatHistory() {
+  const container = $('chatMessages');
+  if (!container) return;
+  container.innerHTML = '';
+  $('chatEmpty')?.remove();
+
+  if (!state.chatMessages.length) {
+    const empty = document.createElement('div');
+    empty.id = 'chatEmpty';
+    empty.className = 'chat-empty';
+    const icon = document.createElement('div');
+    icon.textContent = '💬';
+    const title = document.createElement('strong');
+    title.textContent = 'Nenhuma mensagem ainda';
+    const text = document.createElement('span');
+    text.textContent = 'Envie uma mensagem ou arquivo para a sala.';
+    empty.append(icon, title, text);
+    container.appendChild(empty);
+    return;
+  }
+
+  state.chatMessages.forEach((message) => renderChatMessage(message, false));
+  scrollChatToBottom();
+}
+
+function renderChatMessage(message, shouldScroll = true) {
+  const container = $('chatMessages');
+  if (!container || !message) return;
+  $('chatEmpty')?.remove();
+
+  const item = document.createElement('div');
+  item.className = `chat-message${message.senderId === state.me ? ' own' : ''}`;
+  item.dataset.messageId = message.id || '';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'chat-message-avatar';
+  if (message.avatar) {
+    const img = document.createElement('img');
+    img.src = message.avatar;
+    img.alt = '';
+    img.style.setProperty('--avatar-scale', String(message.avatarScale || 1));
+    avatar.appendChild(img);
+  } else {
+    avatar.textContent = initials(message.nickname);
+  }
+
+  const body = document.createElement('div');
+  body.className = 'chat-message-body';
+
+  const meta = document.createElement('div');
+  meta.className = 'chat-message-meta';
+  const name = document.createElement('strong');
+  name.textContent = message.senderId === state.me ? 'Você' : (message.nickname || 'Participante');
+  const time = document.createElement('span');
+  time.textContent = formatChatTime(message.createdAt);
+  meta.append(name, time);
+  body.appendChild(meta);
+
+  if (message.text) {
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+    bubble.textContent = message.text;
+    body.appendChild(bubble);
+  }
+
+  if (message.attachment?.data) {
+    const attachment = document.createElement('div');
+    attachment.className = 'chat-attachment';
+
+    if (String(message.attachment.type || '').startsWith('image/')) {
+      const preview = document.createElement('img');
+      preview.src = message.attachment.data;
+      preview.alt = message.attachment.name || 'Imagem enviada';
+      preview.loading = 'lazy';
+      attachment.appendChild(preview);
+    }
+
+    const download = document.createElement('a');
+    download.className = 'chat-file-card';
+    download.href = message.attachment.data;
+    download.download = message.attachment.name || 'arquivo';
+    const icon = document.createElement('span');
+    icon.textContent = '📎';
+    const fileMeta = document.createElement('div');
+    const fileName = document.createElement('strong');
+    fileName.textContent = message.attachment.name || 'Arquivo';
+    const fileSize = document.createElement('small');
+    fileSize.textContent = `${formatFileSize(message.attachment.size)} • clique para baixar`;
+    fileMeta.append(fileName, fileSize);
+    download.append(icon, fileMeta);
+    attachment.appendChild(download);
+    body.appendChild(attachment);
+  }
+
+  item.append(avatar, body);
+  container.appendChild(item);
+  if (shouldScroll) scrollChatToBottom();
+}
+
+function clearSelectedChatFile() {
+  state.selectedChatFile = null;
+  $('chatFileInput').value = '';
+  $('chatFilePreview').classList.add('hidden');
+}
+
+function fileExtension(name) {
+  const value = String(name || '');
+  return value.includes('.') ? value.split('.').pop().toLowerCase() : '';
+}
+
+function chooseChatFile() {
+  $('chatFileInput').click();
+}
+
+$('chatFileInput').addEventListener('change', (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const ext = fileExtension(file.name);
+  if (!CHAT_ALLOWED_EXTENSIONS.has(ext)) {
+    clearSelectedChatFile();
+    return showToast('Esse tipo de arquivo não é permitido.');
+  }
+  if (file.size > CHAT_MAX_FILE_SIZE) {
+    clearSelectedChatFile();
+    return showToast('O arquivo deve ter no máximo 2 MB.');
+  }
+  state.selectedChatFile = file;
+  $('chatFileName').textContent = file.name;
+  $('chatFileSize').textContent = formatFileSize(file.size);
+  $('chatFilePreview').classList.remove('hidden');
+});
+
+$('chatAttach').addEventListener('click', chooseChatFile);
+$('removeChatFile').addEventListener('click', clearSelectedChatFile);
+$('chatControl').addEventListener('click', () => {
+  if (isChatDrawerMode() && $('chatPanel').classList.contains('open')) closeChat();
+  else openChat();
+});
+$('closeChat').addEventListener('click', closeChat);
+
+$('chatInput').addEventListener('input', () => {
+  const input = $('chatInput');
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 110)}px`;
+});
+$('chatInput').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    $('chatForm').requestSubmit();
+  }
+});
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+    reader.readAsDataURL(file);
+  });
+}
+
+$('chatForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!state.room || !state.me) return showToast('Entre em uma sala primeiro.');
+
+  const text = $('chatInput').value.trim();
+  const file = state.selectedChatFile;
+  if (!text && !file) return;
+
+  let attachment = null;
+  if (file) {
+    try {
+      const data = await readFileAsDataURL(file);
+      attachment = { name: file.name, type: file.type || 'application/octet-stream', size: file.size, data };
+    } catch {
+      return showToast('Não foi possível ler o arquivo.');
+    }
+  }
+
+  $('chatSend').disabled = true;
+  const result = await new Promise((resolve) => socket.emit('send-chat-message', { text, attachment }, resolve));
+  $('chatSend').disabled = false;
+  if (!result?.ok) return showToast(result?.error || 'Não foi possível enviar a mensagem.');
+
+  $('chatInput').value = '';
+  $('chatInput').style.height = 'auto';
+  clearSelectedChatFile();
+});
+
+socket.on('chat-message', (message) => {
+  if (!state.room || !message) return;
+  state.chatMessages.push(message);
+  if (state.chatMessages.length > 80) state.chatMessages.shift();
+  renderChatMessage(message);
+
+  if (message.senderId !== state.me && !isChatOpen()) {
+    state.unreadChat += 1;
+    updateChatUnread();
+  }
+});
+
+window.addEventListener('resize', () => {
+  if (!isChatDrawerMode()) {
+    state.unreadChat = 0;
+    updateChatUnread();
+  }
+});
+
 function makePeerConnection() {
   return new RTCPeerConnection({ iceServers: config.iceServers });
 }
@@ -433,7 +725,20 @@ async function startSharing() {
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: { ideal: 30, max: 60 } },
-      audio: true
+      // Modo anti-retorno: a transmissão é SOMENTE VÍDEO.
+      // Isso impede eco e evita capturar Discord, notificações e áudio do sistema.
+      audio: false,
+      systemAudio: 'exclude',
+      selfBrowserSurface: 'exclude',
+      surfaceSwitching: 'include'
+    });
+
+    // Segurança extra: se algum navegador ainda entregar uma faixa de áudio,
+    // ela é encerrada e removida antes de enviar para qualquer participante.
+    stream.getAudioTracks().forEach((track) => {
+      track.enabled = false;
+      track.stop();
+      stream.removeTrack(track);
     });
 
     const result = await new Promise((resolve) => socket.emit('start-sharing', {}, resolve));
@@ -445,7 +750,10 @@ async function startSharing() {
     state.localStream = stream;
     state.isSharing = true;
     state.sharerId = state.me;
-    $('stageVideo').srcObject = stream;
+    const localPreview = $('stageVideo');
+    localPreview.muted = true;
+    localPreview.volume = 0;
+    localPreview.srcObject = stream;
     stream.getVideoTracks()[0]?.addEventListener('ended', () => stopSharing(), { once: true });
 
     updateStage();
@@ -474,7 +782,10 @@ function stopSharing(notifyServer = true) {
   state.localStream = null;
   state.isSharing = false;
   if (state.sharerId === state.me) state.sharerId = null;
-  $('stageVideo').srcObject = null;
+  const stageVideo = $('stageVideo');
+  stageVideo.srcObject = null;
+  stageVideo.muted = false;
+  stageVideo.volume = 1;
   updateStage();
 }
 
@@ -485,8 +796,12 @@ function updateStage() {
   $('shareControl').textContent = state.isSharing ? '■ Parar transmissão' : '▣ Compartilhar tela';
   $('shareControl').classList.toggle('stop-control', state.isSharing);
   $('shareFromEmpty').disabled = Boolean(state.sharerId && state.sharerId !== state.me);
+  updateAudioControl();
 
   if (state.isSharing) {
+    const stageVideo = $('stageVideo');
+    stageVideo.muted = true;
+    stageVideo.volume = 0;
     $('sharingLabel').textContent = 'Você está compartilhando sua tela';
     $('videoConnecting').classList.add('hidden');
   } else if (state.sharerId) {
@@ -495,6 +810,20 @@ function updateStage() {
     if (!$('stageVideo').srcObject) $('videoConnecting').classList.remove('hidden');
   }
 }
+
+function updateAudioControl() {
+  const button = $('audioControl');
+  if (!button) return;
+  state.shareAudio = false;
+  button.textContent = '🔇 Áudio bloqueado';
+  button.classList.remove('audio-on');
+  button.disabled = true;
+  button.title = 'Modo anti-retorno: nenhum áudio é transmitido.';
+}
+
+$('audioControl').addEventListener('click', () => {
+  showToast('Áudio bloqueado para evitar retorno e impedir captura do Discord.');
+});
 
 $('shareFromEmpty').addEventListener('click', startSharing);
 $('shareControl').addEventListener('click', startSharing);
@@ -513,6 +842,11 @@ async function leaveRoom() {
   state.room = null;
   state.me = null;
   state.participants = [];
+  state.chatMessages = [];
+  state.unreadChat = 0;
+  clearSelectedChatFile();
+  closeChat();
+  updateChatUnread();
   state.sharerId = null;
   history.pushState({}, '', '/');
   setView('landing');
@@ -533,7 +867,10 @@ socket.on('sharing-started', ({ sharerId }) => {
   if (!state.room) return;
   state.sharerId = sharerId;
   if (sharerId !== state.me) {
-    $('stageVideo').srcObject = null;
+    const stageVideo = $('stageVideo');
+    stageVideo.srcObject = null;
+    stageVideo.muted = false;
+    stageVideo.volume = 1;
     $('videoConnecting').classList.remove('hidden');
   }
   updateStage();
@@ -570,7 +907,11 @@ socket.on('signal', async ({ from, data }) => {
         if (event.candidate) socket.emit('signal', { target: from, data: { type: 'ice', candidate: event.candidate } });
       };
       pc.ontrack = (event) => {
-        $('stageVideo').srcObject = event.streams[0];
+        const stageVideo = $('stageVideo');
+        stageVideo.muted = false;
+        stageVideo.volume = 1;
+        stageVideo.srcObject = event.streams[0];
+        stageVideo.play?.().catch(() => {});
         $('videoConnecting').classList.add('hidden');
       };
       pc.onconnectionstatechange = () => {
@@ -650,6 +991,8 @@ async function routeFromLocation() {
 }
 
 $('year').textContent = new Date().getFullYear();
+updateAudioControl();
+applyDiscordLinks();
 applyIdentityToUI();
 loadPublicRooms();
 routeFromLocation();

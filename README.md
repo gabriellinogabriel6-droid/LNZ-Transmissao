@@ -75,3 +75,48 @@ As salas ficam na memória do servidor. Se o servidor reiniciar, as salas aberta
 - Agora dá para clicar em **Ajustar foto** para aumentar ou recuar a imagem dentro do avatar.
 - Também dá para **remover a foto** e escolher outra.
 - O ajuste é salvo no navegador e aparece na sala.
+
+
+## Link do Discord
+
+Se quiser mostrar o botão do Discord no site, configure no ambiente da hospedagem:
+
+```env
+DISCORD_URL=https://discord.gg/seu-link
+BRAND_NAME=LNZ Transmissão
+```
+
+No Render, isso pode ser adicionado em **Environment Variables**.
+
+
+## Áudio da transmissão
+
+O áudio do sistema fica **desligado por padrão**. Dentro da sala existe o botão **Áudio OFF / Áudio ON**. Ative somente quando quiser transmitir o som do PC junto com a tela.
+
+
+## Proteção contra áudio do Discord
+
+- O site solicita `systemAudio: exclude` ao navegador.
+- Se a pessoa escolher **Tela inteira** ou **Janela**, qualquer faixa de áudio é removida antes da transmissão.
+- O botão de áudio passa a permitir somente **áudio de uma aba do navegador**.
+- Para transmitir som de um vídeo/site sem captar Discord, ative **Áudio da aba** e escolha a opção **Guia/Aba do Chrome** no seletor de compartilhamento.
+
+
+## Modo anti-retorno
+
+Nesta versão, o compartilhamento de tela transmite **somente vídeo**. Nenhum áudio do sistema, Discord, navegador ou notificações é enviado. Isso elimina o retorno/eco causado pela captura de áudio do computador.
+
+
+## Discord oficial
+
+O botão do Discord está configurado para:
+`https://discord.gg/m67kQeZrns`
+
+
+## Chat da sala
+
+- Mensagens em tempo real entre os participantes.
+- Envio de imagens, PDF, TXT, ZIP e documentos de escritório.
+- Limite de 2 MB por arquivo.
+- Executáveis e scripts perigosos são bloqueados.
+- O histórico fica somente enquanto a sala existir no servidor.

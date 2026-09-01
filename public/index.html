@@ -28,6 +28,11 @@
           <div><i>◈</i><span>Escolha entre sala pública ou privada</span></div>
           <div><i>⌁</i><span>Compartilhamento WebRTC com baixa latência</span></div>
         </div>
+
+        <div class="hero-actions">
+          <button id="heroCreateRoom" class="btn btn-primary hero-main-btn">Criar sala agora</button>
+          <a id="discordButton" class="btn btn-outline hero-discord-btn hidden" href="#" target="_blank" rel="noopener noreferrer">Entrar no Discord</a>
+        </div>
       </div>
 
       <div class="entry-card glass-card">
@@ -74,7 +79,7 @@
       <div id="publicEmpty" class="empty-public">Nenhuma sala pública aberta agora.</div>
     </section>
 
-    <footer>© <span id="year"></span> Linozera • LNZ Transmissão</footer>
+    <footer>© <span id="year"></span> Linozera • LNZ Transmissão <a id="footerDiscordLink" class="footer-link hidden" href="#" target="_blank" rel="noopener noreferrer">Discord oficial</a></footer>
   </main>
 
   <main id="prejoinView" class="prejoin-view hidden">
@@ -123,6 +128,7 @@
         <button id="topRoomCode" class="code-pill code-button" title="Copiar código">----</button>
       </div>
       <div class="room-status">
+        <a id="roomDiscordLink" class="top-discord-link hidden" href="#" target="_blank" rel="noopener noreferrer">Discord</a>
         <span id="topPeople" class="people-chip">♙ 0</span>
         <span class="connected"><i></i> Conectado</span>
       </div>
@@ -168,11 +174,50 @@
       <div class="room-controls">
         <button id="shareControl" class="btn btn-primary control-main">▣ Compartilhar tela</button>
         <span></span>
+        <button id="audioControl" class="control-audio" type="button" title="Modo anti-retorno: nenhum áudio é transmitido" disabled>🔇 Áudio bloqueado</button>
+        <span></span>
+        <button id="chatControl" class="control-chat" type="button" title="Abrir chat">💬 Chat <b id="chatUnread" class="chat-unread hidden">0</b></button>
+        <span></span>
         <button id="fullscreenControl" class="control-icon" title="Tela cheia">⛶</button>
         <span></span>
         <button id="leaveControl" class="control-icon leave-icon" title="Sair da sala">↪</button>
       </div>
     </section>
+
+    <aside id="chatPanel" class="chat-panel">
+      <div class="chat-head">
+        <div>
+          <span>CHAT DA SALA</span>
+          <strong>Conversa em tempo real</strong>
+        </div>
+        <button id="closeChat" class="chat-close" type="button" title="Fechar chat">×</button>
+      </div>
+
+      <div id="chatMessages" class="chat-messages">
+        <div id="chatEmpty" class="chat-empty">
+          <div>💬</div>
+          <strong>Nenhuma mensagem ainda</strong>
+          <span>Envie uma mensagem ou arquivo para a sala.</span>
+        </div>
+      </div>
+
+      <div id="chatFilePreview" class="chat-file-preview hidden">
+        <div class="chat-file-icon">📎</div>
+        <div class="chat-file-meta">
+          <strong id="chatFileName">arquivo</strong>
+          <span id="chatFileSize">0 KB</span>
+        </div>
+        <button id="removeChatFile" type="button" title="Remover arquivo">×</button>
+      </div>
+
+      <form id="chatForm" class="chat-compose">
+        <input id="chatFileInput" type="file" hidden accept=".png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx" />
+        <button id="chatAttach" class="chat-attach" type="button" title="Enviar arquivo">📎</button>
+        <textarea id="chatInput" maxlength="1000" rows="1" placeholder="Escreva uma mensagem..."></textarea>
+        <button id="chatSend" class="chat-send" type="submit" title="Enviar">➤</button>
+      </form>
+      <div class="chat-hint">Arquivos de até 2 MB • executáveis bloqueados</div>
+    </aside>
   </main>
 
   <div id="createModal" class="modal hidden" aria-hidden="true">
@@ -222,7 +267,7 @@
 
       <div class="field">
         <div class="label-line"><label for="avatarZoom">TAMANHO DA FOTO</label><small id="avatarZoomValue">100%</small></div>
-        <input id="avatarZoom" type="range" min="0.6" max="1.8" step="0.05" value="1" />
+        <input id="avatarZoom" type="range" min="0.5" max="3" step="0.05" value="1.35" />
         <small class="helper">Arraste para aproximar ou recuar a foto dentro do círculo.</small>
       </div>
 
