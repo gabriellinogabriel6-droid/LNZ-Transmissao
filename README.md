@@ -383,3 +383,17 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - Fantasmas e lua removidos.
 - O fundo agora usa sempre a imagem da marca enviada pelo usuário.
 - O mesmo fundo aparece no início, na sala e nas áreas do aplicativo.
+
+
+## Correção feita
+- Tela inicial e sala agora ficam separadas.
+- Landing, prejoin e room não aparecem mais juntas.
+- Ao entrar na sala, a tela inicial some totalmente.
+
+
+## Fundo da marca atualizado
+
+- A nova imagem enviada foi aplicada como fundo em todo o aplicativo.
+- O fundo aparece na tela inicial, entrada, sala, chat e atrás dos modais.
+- As camadas escuras foram reduzidas para a imagem ficar bem mais visível.
+- As telas continuam separadas.

@@ -2388,3 +2388,193 @@ html[data-season-theme="default"] .background-art::after {
     background-position: center center !important;
   }
 }
+
+
+/* ============================================================
+   CORREÇÃO: TELAS SEPARADAS
+   - landing, prejoin e room nunca aparecem juntas
+   - cada tela ocupa a área certa sozinha
+   ============================================================ */
+
+#landingView,
+#prejoinView,
+#roomView {
+  width: 100%;
+}
+
+body[data-view="landing"] #landingView { display: block !important; }
+body[data-view="landing"] #prejoinView,
+body[data-view="landing"] #roomView { display: none !important; }
+
+body[data-view="prejoin"] #prejoinView { display: flex !important; }
+body[data-view="prejoin"] #landingView,
+body[data-view="prejoin"] #roomView { display: none !important; }
+
+body[data-view="room"] #roomView { display: grid !important; }
+body[data-view="room"] #landingView,
+body[data-view="room"] #prejoinView { display: none !important; }
+
+body[data-view="room"] {
+  overflow: hidden !important;
+}
+
+body[data-view="landing"],
+body[data-view="prejoin"] {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+#landingView {
+  min-height: 100vh !important;
+}
+
+#prejoinView {
+  min-height: 100vh !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+#roomView {
+  min-height: 100vh !important;
+  height: 100vh !important;
+}
+
+@media (max-width: 760px) {
+  body[data-view="room"] #roomView {
+    display: block !important;
+    min-height: 100dvh !important;
+    height: 100dvh !important;
+  }
+}
+
+
+/* ============================================================
+   FUNDO DA MARCA — BEM VISÍVEL EM TODO O APP
+   ============================================================ */
+
+html,
+body {
+  background: #050407 !important;
+}
+
+.background-art,
+html[data-season-theme="halloween"] .background-art,
+html[data-season-theme="default"] .background-art {
+  position: fixed !important;
+  inset: 0 !important;
+  background:
+    linear-gradient(rgba(3,2,6,.12), rgba(3,2,6,.20)),
+    url('/assets/brand-background.png') center center / cover no-repeat fixed !important;
+  opacity: 1 !important;
+  filter: saturate(1.07) contrast(1.03) brightness(1.03) !important;
+}
+
+.background-art::before,
+.background-art::after,
+html[data-season-theme="halloween"] .background-art::before,
+html[data-season-theme="halloween"] .background-art::after,
+html[data-season-theme="default"] .background-art::before,
+html[data-season-theme="default"] .background-art::after {
+  display: none !important;
+  content: none !important;
+}
+
+/* Todas as telas deixam o fundo aparecer */
+#landingView,
+#prejoinView,
+#roomView,
+.landing-view,
+.prejoin-view,
+.room-view {
+  background: transparent !important;
+}
+
+/* Tela inicial */
+.landing-shell,
+.public-section {
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+.hero-copy {
+  text-shadow: 0 2px 14px rgba(0,0,0,.70) !important;
+}
+
+/* Painel de entrada translúcido */
+.entry-card,
+.public-card,
+.empty-public {
+  background: rgba(10,8,14,.72) !important;
+  border-color: rgba(255,255,255,.10) !important;
+}
+
+/* Sala: mesma imagem, mais visível */
+.room-stage {
+  background:
+    linear-gradient(rgba(3,2,6,.20), rgba(3,2,6,.26)),
+    url('/assets/brand-background.png') center center / cover no-repeat fixed !important;
+}
+
+/* Laterais e topo transparentes o bastante para mostrar a arte */
+.room-topbar,
+.room-sidebar,
+.chat-panel {
+  background: rgba(9,8,12,.76) !important;
+  border-color: rgba(255,255,255,.08) !important;
+}
+
+.invite-card,
+.room-controls,
+.audio-mixer-panel,
+.camera-dock,
+.modal-card,
+.participant-menu {
+  background: rgba(12,10,16,.80) !important;
+  border-color: rgba(255,255,255,.09) !important;
+}
+
+/* Modais também usam o fundo da marca por trás */
+.modal {
+  background: rgba(3,2,6,.28) !important;
+}
+.modal-backdrop {
+  background: rgba(2,1,4,.30) !important;
+}
+
+/* Remove qualquer decoração antiga que cubra a marca */
+.seasonal-decor,
+.discord-rail {
+  display: none !important;
+}
+
+/* Área vazia da transmissão deixa o logo/fundo visível */
+.empty-stage {
+  background: transparent !important;
+}
+.empty-stage::before,
+.empty-stage::after {
+  display: none !important;
+  content: none !important;
+}
+
+/* Chat com transparência */
+.chat-messages,
+.chat-compose {
+  background: rgba(7,6,10,.54) !important;
+}
+
+/* Mobile */
+@media (max-width: 760px) {
+  .background-art,
+  .room-stage {
+    background-position: center center !important;
+    background-attachment: scroll !important;
+  }
+
+  .entry-card,
+  .room-topbar,
+  .room-sidebar,
+  .chat-panel {
+    background: rgba(9,8,12,.80) !important;
+  }
+}
