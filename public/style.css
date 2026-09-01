@@ -2578,3 +2578,482 @@ html[data-season-theme="default"] .background-art::after {
     background: rgba(9,8,12,.80) !important;
   }
 }
+
+
+/* ============================================================
+   VISUAL APROVADO — aplicado no site real
+   ============================================================ */
+
+:root {
+  --lnz-purple: #7b2cff;
+  --lnz-purple-2: #a84dff;
+  --lnz-panel: rgba(4, 3, 7, .90);
+  --lnz-line: rgba(184, 109, 255, .24);
+  --lnz-muted: #a7a2ad;
+}
+
+/* Fundo da marca em destaque, sem esconder o logo central */
+.background-art,
+html[data-season-theme="halloween"] .background-art,
+html[data-season-theme="default"] .background-art {
+  position: fixed !important;
+  inset: 0 !important;
+  background:
+    linear-gradient(90deg,
+      rgba(1,1,3,.70) 0%,
+      rgba(3,2,7,.34) 29%,
+      rgba(3,2,7,.05) 48%,
+      rgba(3,2,7,.08) 65%,
+      rgba(1,1,3,.62) 100%),
+    linear-gradient(to bottom,
+      rgba(0,0,0,.06) 0%,
+      rgba(0,0,0,.02) 70%,
+      rgba(0,0,0,.34) 100%),
+    url('/assets/brand-background-pro.webp') center center / cover no-repeat fixed !important;
+  opacity: 1 !important;
+  filter: saturate(1.20) contrast(1.05) brightness(1.08) !important;
+}
+
+/* Página inicial */
+.landing-view {
+  min-height: 100vh !important;
+  padding: 0 32px 28px !important;
+  background: transparent !important;
+}
+
+.landing-shell {
+  width: min(1480px, 100%) !important;
+  min-height: 76vh !important;
+  margin: 0 auto !important;
+  padding: 42px 0 18px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.32fr) 420px !important;
+  align-items: center !important;
+  gap: 56px !important;
+}
+
+.hero-copy {
+  max-width: 760px !important;
+  padding-left: 8px !important;
+  text-shadow: 0 3px 18px rgba(0,0,0,.78) !important;
+}
+
+.mini-brand {
+  display: flex !important;
+  align-items: center !important;
+  gap: 13px !important;
+  margin-bottom: 34px !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+
+.mini-brand > img {
+  width: 45px !important;
+  height: 45px !important;
+  object-fit: contain !important;
+  filter: drop-shadow(0 0 14px rgba(139,54,255,.30)) !important;
+}
+
+.mini-brand strong {
+  display: block !important;
+  color: #fff !important;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  letter-spacing: .035em !important;
+}
+
+.mini-brand b {
+  display: block !important;
+  margin-top: 4px !important;
+  color: #b6b1bc !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+}
+
+.hero-copy h1 {
+  max-width: 740px !important;
+  margin: 0 0 25px !important;
+  font-size: clamp(58px, 6.2vw, 92px) !important;
+  line-height: .96 !important;
+  letter-spacing: -.055em !important;
+  color: #fff !important;
+  font-weight: 900 !important;
+}
+
+.hero-copy h1 em {
+  display: inline-block !important;
+  color: #8f36ff !important;
+  font-style: normal !important;
+  text-shadow:
+    0 0 28px rgba(126,34,255,.20),
+    0 3px 18px rgba(0,0,0,.78) !important;
+}
+
+.hero-copy > p {
+  max-width: 585px !important;
+  margin: 0 0 25px !important;
+  color: #e3dfe8 !important;
+  font-size: 17px !important;
+  line-height: 1.62 !important;
+}
+
+.benefits {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+  margin: 0 0 34px !important;
+}
+
+.benefits > div {
+  min-height: 48px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 0 17px !important;
+  border-radius: 11px !important;
+  color: #f1edf6 !important;
+  background: rgba(8,7,12,.78) !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  box-shadow: 0 9px 25px rgba(0,0,0,.22) !important;
+}
+
+.benefits i {
+  color: #a84dff !important;
+  font-style: normal !important;
+}
+
+.hero-actions {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 11px !important;
+  max-width: 720px !important;
+}
+
+.hero-actions .btn {
+  min-height: 58px !important;
+  border-radius: 11px !important;
+  font-size: 14px !important;
+  font-weight: 850 !important;
+  box-shadow: none !important;
+}
+
+.hero-main-btn,
+.entry-card .btn-primary {
+  background: linear-gradient(135deg, #6e22ff, #8c31ff) !important;
+  border: 1px solid rgba(189,121,255,.35) !important;
+  color: #fff !important;
+  box-shadow:
+    0 10px 26px rgba(89,21,189,.23),
+    inset 0 1px 0 rgba(255,255,255,.12) !important;
+}
+
+.hero-main-btn:hover,
+.entry-card .btn-primary:hover {
+  transform: translateY(-1px) !important;
+  background: linear-gradient(135deg, #7c2cff, #9c43ff) !important;
+}
+
+.hero-discord-btn,
+.hero-actions .btn-outline {
+  background: rgba(8,8,12,.84) !important;
+  border: 1px solid rgba(255,255,255,.11) !important;
+  color: #f2eff5 !important;
+}
+
+#heroSendFeedback {
+  grid-column: 1 !important;
+}
+
+/* Card de entrada à direita */
+.entry-card {
+  width: 100% !important;
+  max-width: 420px !important;
+  justify-self: end !important;
+  padding: 29px !important;
+  border-radius: 20px !important;
+  background:
+    linear-gradient(180deg, rgba(5,4,8,.95), rgba(4,3,7,.91)) !important;
+  border: 1px solid rgba(187,109,255,.25) !important;
+  box-shadow:
+    0 28px 80px rgba(0,0,0,.44),
+    inset 0 1px 0 rgba(255,255,255,.035) !important;
+}
+
+.entry-kicker {
+  color: #9e4cff !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  letter-spacing: .13em !important;
+}
+
+.entry-card h2 {
+  margin-top: 10px !important;
+  margin-bottom: 7px !important;
+  color: #fff !important;
+  font-size: 26px !important;
+  letter-spacing: -.02em !important;
+}
+
+.entry-card > p {
+  color: #aaa4af !important;
+  line-height: 1.45 !important;
+}
+
+.profile-row {
+  margin-top: 25px !important;
+  gap: 14px !important;
+}
+
+.avatar-button {
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 50% !important;
+  background: #1c1b23 !important;
+  border: 1px solid rgba(255,255,255,.11) !important;
+}
+
+.field label,
+.field-label,
+.label-line label {
+  color: #bc79ff !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  letter-spacing: .055em !important;
+}
+
+.field input,
+.join-code-row input {
+  min-height: 54px !important;
+  background: rgba(14,14,19,.95) !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  border-radius: 10px !important;
+  color: #fff !important;
+}
+
+.field input:focus,
+.join-code-row input:focus {
+  border-color: rgba(154,71,255,.72) !important;
+  box-shadow: 0 0 0 3px rgba(124,44,255,.12) !important;
+}
+
+.avatar-actions {
+  gap: 10px !important;
+  margin-top: 12px !important;
+}
+
+.avatar-actions .small-btn {
+  min-height: 42px !important;
+  border-radius: 9px !important;
+  border: 1px solid rgba(142,64,255,.35) !important;
+  background: rgba(8,7,11,.78) !important;
+}
+
+.gif-avatar-hint,
+.trust-line {
+  color: #8f8a95 !important;
+}
+
+.entry-card > .btn-wide {
+  min-height: 62px !important;
+  margin-top: 22px !important;
+  border-radius: 11px !important;
+  font-size: 16px !important;
+}
+
+.divider {
+  margin: 27px 0 !important;
+}
+
+.divider::before,
+.divider::after {
+  background: rgba(255,255,255,.10) !important;
+}
+
+.join-code-row {
+  grid-template-columns: minmax(0,1fr) 105px !important;
+  gap: 12px !important;
+}
+
+.join-code-row .btn {
+  min-height: 54px !important;
+  border-radius: 10px !important;
+  background: rgba(9,8,13,.91) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+}
+
+/* Salas abertas no estilo do mockup */
+.public-section {
+  width: min(1480px, 100%) !important;
+  margin: 0 auto !important;
+  padding: 18px 0 8px !important;
+  border-top: 1px solid rgba(255,255,255,.10) !important;
+}
+
+.section-heading span {
+  color: #a84dff !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  letter-spacing: .12em !important;
+}
+
+.section-heading h3 {
+  color: #fff !important;
+  font-size: 24px !important;
+}
+
+.empty-public,
+.public-card {
+  background: rgba(6,6,10,.78) !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  border-radius: 10px !important;
+}
+
+.icon-btn {
+  border-color: rgba(139,65,255,.36) !important;
+  background: rgba(6,6,10,.85) !important;
+  color: #d7b9ff !important;
+}
+
+footer {
+  width: min(1480px, 100%) !important;
+  margin: 18px auto 0 !important;
+  color: #77727d !important;
+}
+
+.footer-link {
+  color: #a84dff !important;
+}
+
+/* Sala usa a mesma identidade sem poluir */
+.room-stage {
+  background:
+    linear-gradient(rgba(3,2,7,.23), rgba(3,2,7,.34)),
+    url('/assets/brand-background-pro.webp') center center / cover no-repeat fixed !important;
+}
+
+.room-topbar,
+.room-sidebar,
+.chat-panel {
+  background: rgba(5,5,9,.88) !important;
+}
+
+.room-controls {
+  background: rgba(8,7,12,.94) !important;
+  border: 1px solid rgba(166,88,255,.18) !important;
+}
+
+#shareControl {
+  background: linear-gradient(135deg, #6e22ff, #953cff) !important;
+  color: white !important;
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+  .landing-view {
+    padding: 0 18px 26px !important;
+  }
+
+  .landing-shell {
+    grid-template-columns: 1fr !important;
+    min-height: auto !important;
+    gap: 28px !important;
+    padding-top: 24px !important;
+  }
+
+  .hero-copy {
+    max-width: none !important;
+    padding-left: 0 !important;
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(46px, 12vw, 70px) !important;
+    max-width: 650px !important;
+  }
+
+  .entry-card {
+    max-width: 600px !important;
+    justify-self: stretch !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .background-art {
+    background:
+      linear-gradient(rgba(1,1,3,.52), rgba(1,1,3,.62)),
+      url('/assets/brand-background-pro.webp') 53% center / cover no-repeat !important;
+  }
+
+  .landing-view {
+    padding: 0 13px 22px !important;
+  }
+
+  .landing-shell {
+    padding-top: 18px !important;
+  }
+
+  .mini-brand {
+    margin-bottom: 22px !important;
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(42px, 13vw, 58px) !important;
+    line-height: .98 !important;
+  }
+
+  .hero-copy > p {
+    font-size: 14px !important;
+  }
+
+  .benefits {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .benefits > div {
+    min-height: 44px !important;
+  }
+
+  .hero-actions {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .hero-actions .btn {
+    min-height: 52px !important;
+  }
+
+  #heroSendFeedback {
+    grid-column: 1 / -1 !important;
+  }
+
+  .entry-card {
+    padding: 20px !important;
+    border-radius: 15px !important;
+  }
+
+  .entry-card h2 {
+    font-size: 23px !important;
+  }
+
+  .profile-row {
+    align-items: end !important;
+  }
+
+  .avatar-button {
+    width: 58px !important;
+    height: 58px !important;
+  }
+
+  .join-code-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .join-code-row .btn {
+    width: 100% !important;
+  }
+
+  .section-heading h3 {
+    font-size: 21px !important;
+  }
+}

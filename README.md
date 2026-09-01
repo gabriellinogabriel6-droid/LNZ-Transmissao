@@ -397,3 +397,15 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - O fundo aparece na tela inicial, entrada, sala, chat e atrás dos modais.
 - As camadas escuras foram reduzidas para a imagem ficar bem mais visível.
 - As telas continuam separadas.
+
+
+## Visual aprovado aplicado
+
+- Layout real baseado no mockup aprovado.
+- Fundo da marca com logo central grande e bem visível.
+- Hero à esquerda e painel de entrada à direita.
+- Roxo mais vivo nos pontos de ação.
+- Painéis pretos e translúcidos sem esconder a arte.
+- Responsivo para celular.
+- Tela inicial e sala continuam separadas.
+- Fundo otimizado para WebP para reduzir carregamento.
