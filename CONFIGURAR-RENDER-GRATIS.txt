@@ -1,0 +1,61 @@
+LNZ TRANSMISSÃO — RENDER GRÁTIS + BANCO GRÁTIS
+
+OBJETIVO
+- Site/servidor: Render Web Service no plano FREE.
+- Banco permanente: Neon PostgreSQL no plano FREE.
+- Não criar Postgres pago dentro do Render.
+
+PASSO 1 — MANTENHA SEU WEB SERVICE DO RENDER
+Seu serviço LNZ-Transmissao pode continuar no Render.
+Em Settings / Instance Type, confirme que o plano do Web Service é FREE.
+
+PASSO 2 — CRIE O BANCO GRATUITO
+1. Entre em https://neon.com
+2. Crie uma conta/projeto.
+3. Nome sugerido: lnz-transmissao
+4. Depois de criar, copie a Connection String PostgreSQL.
+   Ela começa com: postgresql://
+5. Prefira a connection string pooled se o Neon oferecer essa opção.
+
+PASSO 3 — COLE SOMENTE UMA VARIÁVEL NO RENDER
+No Render:
+LNZ-Transmissao > Environment > Add Environment Variable
+
+Key:
+DATABASE_URL
+
+Value:
+Cole a connection string inteira do Neon.
+
+Salve com Save and Deploy.
+
+PASSO 4 — CONFIRA
+Abra Logs do Render.
+O aviso "DATABASE_URL não configurado" deve desaparecer.
+Abra no navegador:
+https://SEU-SITE.onrender.com/health
+
+O campo database deve aparecer como:
+"postgres"
+
+DADOS QUE FICAM SALVOS NO BANCO
+- login e senha protegida por hash
+- manter conectado
+- código de recuperação
+- foto/GIF do perfil
+- zoom/posição da foto
+- bio e status
+- cor do site
+- amigos e pedidos
+- preferências de áudio e interface
+- feedbacks e logs persistentes do painel admin
+
+IMPORTANTE SOBRE O RENDER FREE
+- O serviço pode dormir depois de ficar sem uso.
+- Quando alguém abrir novamente, pode levar cerca de 1 minuto para acordar.
+- Isso não apaga as contas porque elas ficam no Neon, não no disco local do Render.
+
+NÃO FAÇA
+- Não coloque DATABASE_URL no GitHub.
+- Não use SQLite/arquivo JSON para salvar contas no Render Free: o disco é temporário.
+- Não precisa comprar o Postgres de US$ 10,50/mês do Render para este projeto.

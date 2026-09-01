@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: lnz-transmissao
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DISCORD_URL
+        value: https://discord.gg/m67kQeZrns
+      - key: BRAND_NAME
+        value: LNZ Transmissão
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: FEEDBACK_WEBHOOK_URL
+        sync: false
+      - key: TURN_URL
+        sync: false
+      - key: TURN_USERNAME
+        sync: false
+      - key: TURN_CREDENTIAL
+        sync: false

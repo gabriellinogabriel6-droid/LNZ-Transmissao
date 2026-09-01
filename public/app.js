@@ -45,10 +45,19 @@ const state = {
   mutedSharers: new Set(),
   voiceJoined: false,
   voiceMuted: false,
+  voiceServerMuted: false,
   voiceStream: null,
   voicePeers: new Map(),
   voiceAudios: new Map(),
+  voiceRemoteStreams: new Map(),
   voicePendingIce: new Map(),
+  voicePeerVolumes: new Map(),
+  voicePeerMuted: new Set(),
+  cameraOn: false,
+  cameraTrack: null,
+  cameraHiddenPeers: new Set(),
+  cameraDockMinimized: false,
+  participantMenuTarget: null,
   voiceSpeaking: false,
   voiceSpeakingContext: null,
   voiceSpeakingTimer: null,
@@ -83,6 +92,7 @@ function setAuthMode(mode) {
   $('authRecoverTab')?.classList.toggle('active', recover);
   $('authConfirmWrap')?.classList.toggle('hidden', !(register || recover));
   $('authRecoveryCodeWrap')?.classList.toggle('hidden', !recover);
+  $('authRememberWrap')?.classList.toggle('hidden', recover);
   $('forgotPasswordButton')?.classList.toggle('hidden', recover);
   if ($('authTitle')) $('authTitle').textContent = register ? 'Criar sua conta' : (recover ? 'Recuperar sua conta' : 'Entrar na sua conta');
   if ($('authSubmit')) $('authSubmit').textContent = register ? 'Criar conta' : (recover ? 'Trocar senha e entrar' : 'Entrar');
@@ -117,9 +127,20 @@ function updateAccountUI() {
     if (Number.isFinite(Number(state.account.avatarOffsetX))) state.avatarOffsetX = Number(state.account.avatarOffsetX);
     if (Number.isFinite(Number(state.account.avatarOffsetY))) state.avatarOffsetY = Number(state.account.avatarOffsetY);
     state.themeColor = state.account.themeColor || state.themeColor || '#7a3cff';
+    const savedPrefs = state.account.preferences || {};
+    if (Number.isFinite(Number(savedPrefs.transmissionVolume))) state.transmissionVolume = Math.min(1, Math.max(0, Number(savedPrefs.transmissionVolume)));
+    if (Number.isFinite(Number(savedPrefs.voiceVolume))) state.voiceVolume = Math.min(1, Math.max(0, Number(savedPrefs.voiceVolume)));
+    if (typeof savedPrefs.voiceOutputMuted === 'boolean') state.voiceOutputMuted = savedPrefs.voiceOutputMuted;
+    if (typeof savedPrefs.transmissionMuted === 'boolean') state.remoteAudioMuted = savedPrefs.transmissionMuted;
+    if (typeof savedPrefs.shareAudio === 'boolean') state.shareAudio = savedPrefs.shareAudio;
     localStorage.setItem('lnz_theme_color', state.themeColor);
+    localStorage.setItem('lnz_transmission_volume', String(state.transmissionVolume));
+    localStorage.setItem('lnz_voice_volume', String(state.voiceVolume));
+    localStorage.setItem('lnz_voice_output_muted', state.voiceOutputMuted ? '1' : '0');
     persistAvatarState();
     applyThemeColor(state.themeColor);
+    updateMixerUI?.();
+    updateAudioControl?.();
 
     if ($('landingNickname')) {
       $('landingNickname').value = username;
@@ -233,6 +254,7 @@ async function submitAuth() {
   const password = $('authPassword')?.value || '';
   const confirm = $('authPasswordConfirm')?.value || '';
   const recoveryCode = $('authRecoveryCode')?.value.trim() || '';
+  const remember = state.authMode === 'recover' ? true : Boolean($('authRemember')?.checked);
   const error = $('authError');
   if (error) error.classList.add('hidden');
 
@@ -250,7 +272,10 @@ async function submitAuth() {
   if (button) { button.disabled = true; button.textContent = loadingText; }
   try {
     const endpoint = state.authMode === 'register' ? 'register' : (state.authMode === 'recover' ? 'recover' : 'login');
-    const body = state.authMode === 'recover' ? { username, recoveryCode, password } : { username, password };
+    const body = state.authMode === 'recover'
+      ? { username, recoveryCode, password, remember }
+      : { username, password, remember };
+    localStorage.setItem('lnz_remember_login', remember ? '1' : '0');
     const response = await fetch(`/api/auth/${endpoint}`, {
       method: 'POST',
       credentials: 'same-origin',
@@ -266,7 +291,11 @@ async function submitAuth() {
     await reconnectSocketAfterAuth();
     closeAuthModal();
     if (data.recoveryCode) showRecoveryCode(data.recoveryCode);
-    showToast(state.authMode === 'register' ? 'Conta criada e conectada.' : (state.authMode === 'recover' ? 'Senha alterada. Você já está conectado.' : 'Login realizado.'));
+    showToast(state.authMode === 'register'
+      ? (remember ? 'Conta criada. Você ficará conectado neste dispositivo.' : 'Conta criada e conectada.')
+      : (state.authMode === 'recover'
+        ? 'Senha alterada. Você já está conectado.'
+        : (remember ? 'Login realizado. Manter conectado ativado.' : 'Login realizado.')));
     setAuthMode('login');
     if ($('authPassword')) $('authPassword').value = '';
     if ($('authPasswordConfirm')) $('authPasswordConfirm').value = '';
@@ -348,6 +377,32 @@ async function apiJson(url, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível concluir a ação.');
   return data;
+}
+
+function currentSavedPreferences() {
+  return {
+    transmissionVolume: state.transmissionVolume,
+    voiceVolume: state.voiceVolume,
+    voiceOutputMuted: state.voiceOutputMuted,
+    transmissionMuted: state.remoteAudioMuted,
+    shareAudio: state.shareAudio
+  };
+}
+
+function savePreferencesToAccountSoon() {
+  if (!state.account) return;
+  clearTimeout(savePreferencesToAccountSoon.timer);
+  savePreferencesToAccountSoon.timer = setTimeout(async () => {
+    try {
+      const data = await apiJson('/api/preferences/update', {
+        method: 'POST',
+        body: JSON.stringify({ preferences: currentSavedPreferences() })
+      });
+      state.account = { ...state.account, preferences: data.preferences };
+    } catch {
+      // Mantém a preferência local e tenta de novo na próxima alteração.
+    }
+  }, 450);
 }
 
 function setAvatarInContainer(container, profile, fallback = '?') {
@@ -717,6 +772,7 @@ $('authLogout')?.addEventListener('click', logoutAccount);
 $('authLoginTab')?.addEventListener('click', () => setAuthMode('login'));
 $('authRegisterTab')?.addEventListener('click', () => setAuthMode('register'));
 $('authRecoverTab')?.addEventListener('click', () => setAuthMode('recover'));
+$('authRemember')?.addEventListener('change', () => localStorage.setItem('lnz_remember_login', $('authRemember').checked ? '1' : '0'));
 $('forgotPasswordButton')?.addEventListener('click', () => setAuthMode('recover'));
 $('regenerateRecoveryCode')?.addEventListener('click', regenerateRecoveryCode);
 $('copyRecoveryCode')?.addEventListener('click', copyRecoveryCodeValue);
@@ -909,7 +965,7 @@ $('avatarInput').addEventListener('change', (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) return showToast('Escolha uma imagem válida.');
-  if (file.size > 1400 * 1024) return showToast('Use uma imagem ou GIF menor que 1,4 MB.');
+  if (file.size > 2 * 1024 * 1024) return showToast('Use uma imagem ou GIF menor que 2 MB.');
 
   const reader = new FileReader();
   reader.onload = () => {
@@ -1234,6 +1290,235 @@ function enterActiveRoom(result) {
   updateStage();
 }
 
+function participantById(id) {
+  return state.participants.find((person) => person.id === id) || null;
+}
+
+function renderCameraDock() {
+  const dock = $('cameraDock');
+  const grid = $('cameraGrid');
+  if (!dock || !grid) return;
+
+  const cameraPeople = state.participants.filter((person) => person.inVoice && (person.cameraOn || (person.id === state.me && state.cameraOn)));
+  dock.classList.toggle('hidden', cameraPeople.length === 0);
+  dock.classList.toggle('minimized', state.cameraDockMinimized);
+  if ($('cameraCountLabel')) $('cameraCountLabel').textContent = `${cameraPeople.length} câmera${cameraPeople.length === 1 ? '' : 's'}`;
+  if ($('toggleCameraDock')) $('toggleCameraDock').textContent = state.cameraDockMinimized ? '+' : '−';
+
+  const activeIds = new Set(cameraPeople.map((person) => person.id));
+  grid.querySelectorAll('.camera-card').forEach((card) => {
+    if (!activeIds.has(card.dataset.peerId)) {
+      const video = card.querySelector('video');
+      if (video) video.srcObject = null;
+      card.remove();
+    }
+  });
+
+  cameraPeople.forEach((person) => {
+    let card = grid.querySelector(`.camera-card[data-peer-id="${CSS.escape(person.id)}"]`);
+    if (!card) {
+      card = document.createElement('div');
+      card.className = 'camera-card';
+      card.dataset.peerId = person.id;
+
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = true;
+
+      const placeholder = document.createElement('div');
+      placeholder.className = 'camera-card-placeholder';
+      const avatar = document.createElement('div');
+      avatar.className = 'participant-avatar';
+      const placeholderText = document.createElement('span');
+      placeholder.append(avatar, placeholderText);
+
+      const footer = document.createElement('div');
+      footer.className = 'camera-card-footer';
+      const name = document.createElement('strong');
+      const status = document.createElement('span');
+      footer.append(name, status);
+
+      card.append(video, placeholder, footer);
+      grid.appendChild(card);
+    }
+
+    const video = card.querySelector('video');
+    const placeholder = card.querySelector('.camera-card-placeholder');
+    const avatar = placeholder.querySelector('.participant-avatar');
+    const placeholderText = placeholder.querySelector('span');
+    const name = card.querySelector('.camera-card-footer strong');
+    const status = card.querySelector('.camera-card-footer span');
+
+    const isLocal = person.id === state.me;
+    const hiddenForMe = !isLocal && state.cameraHiddenPeers.has(person.id);
+    const stream = isLocal ? state.voiceStream : state.voiceRemoteStreams.get(person.id);
+    const hasLiveVideo = Boolean(stream?.getVideoTracks?.().some((track) => track.readyState === 'live'));
+
+    card.classList.toggle('local', isLocal);
+    card.classList.toggle('speaking', Boolean(person.speaking && !person.micMuted));
+    card.classList.toggle('camera-hidden', hiddenForMe || !hasLiveVideo);
+    name.textContent = isLocal ? `${person.nickname} (você)` : person.nickname;
+    status.textContent = person.micMuted ? '🔇 Mic OFF' : (person.speaking ? '🟢 Falando' : '🎙 Na call');
+
+    avatar.innerHTML = '';
+    if (person.avatar) {
+      const img = document.createElement('img');
+      img.src = person.avatar;
+      img.alt = '';
+      img.style.setProperty('--avatar-scale', String(person.avatarScale || 1));
+      img.style.setProperty('--avatar-x', String(person.avatarOffsetX || 0));
+      img.style.setProperty('--avatar-y', String(person.avatarOffsetY || 0));
+      avatar.appendChild(img);
+    } else {
+      avatar.textContent = initials(person.nickname);
+    }
+
+    if (hiddenForMe) placeholderText.textContent = 'Câmera oculta para você';
+    else if (!hasLiveVideo) placeholderText.textContent = 'Conectando câmera...';
+    else placeholderText.textContent = '';
+
+    if (!hiddenForMe && hasLiveVideo) {
+      if (video.srcObject !== stream) video.srcObject = stream;
+      video.classList.remove('hidden');
+      placeholder.classList.add('hidden');
+      video.play().catch(() => {});
+    } else {
+      video.srcObject = null;
+      video.classList.add('hidden');
+      placeholder.classList.remove('hidden');
+    }
+  });
+}
+
+$('toggleCameraDock')?.addEventListener('click', () => {
+  state.cameraDockMinimized = !state.cameraDockMinimized;
+  renderCameraDock();
+});
+
+function closeParticipantMenu() {
+  const menu = $('participantMenu');
+  if (!menu) return;
+  menu.classList.add('hidden');
+  state.participantMenuTarget = null;
+}
+
+function renderParticipantMenu() {
+  const menu = $('participantMenu');
+  const person = participantById(state.participantMenuTarget);
+  if (!menu || !person) return closeParticipantMenu();
+
+  $('participantMenuName').textContent = person.nickname;
+  $('participantMenuStatus').textContent = person.inVoice
+    ? (person.serverMuted ? 'Na call • Mic bloqueado pelo dono' : (person.micMuted ? 'Na call • Mic OFF' : (person.speaking ? 'Falando agora' : 'Na call • Em silêncio')))
+    : (person.isSharer ? 'Compartilhando tela' : 'Conectado');
+
+  const avatar = $('participantMenuAvatar');
+  avatar.innerHTML = '';
+  if (person.avatar) {
+    const img = document.createElement('img');
+    img.src = person.avatar;
+    img.alt = '';
+    img.style.setProperty('--avatar-scale', String(person.avatarScale || 1));
+    img.style.setProperty('--avatar-x', String(person.avatarOffsetX || 0));
+    img.style.setProperty('--avatar-y', String(person.avatarOffsetY || 0));
+    avatar.appendChild(img);
+  } else avatar.textContent = initials(person.nickname);
+
+  const self = person.id === state.me;
+  const volumeWrap = $('participantVolumeWrap');
+  const volume = Math.round(voicePeerVolume(person.id) * 100);
+  volumeWrap.classList.toggle('hidden', self || !person.inVoice);
+  $('participantVolume').value = String(volume);
+  $('participantVolumeValue').textContent = `${volume}%`;
+
+  const mute = $('participantMuteForMe');
+  mute.classList.toggle('hidden', self || !person.inVoice);
+  mute.textContent = state.voicePeerMuted.has(person.id) ? '🔊 Voltar a ouvir' : '🔇 Silenciar para mim';
+
+  const hideCamera = $('participantHideCameraForMe');
+  hideCamera.classList.toggle('hidden', self || !person.cameraOn);
+  hideCamera.textContent = state.cameraHiddenPeers.has(person.id) ? '📹 Mostrar câmera para mim' : '📹 Ocultar câmera para mim';
+
+  const me = participantById(state.me);
+  const hostActions = $('participantHostActions');
+  const canModerate = Boolean(me?.isHost && !self);
+  hostActions.classList.toggle('hidden', !canModerate);
+  $('participantHostMute').disabled = !person.inVoice;
+  $('participantHostMute').textContent = person.serverMuted ? '🔓 Liberar microfone na sala' : '🔇 Silenciar na sala';
+}
+
+function openParticipantMenu(person, anchor) {
+  const menu = $('participantMenu');
+  if (!menu || !person) return;
+  state.participantMenuTarget = person.id;
+  renderParticipantMenu();
+  menu.classList.remove('hidden');
+  const rect = anchor.getBoundingClientRect();
+  const width = Math.min(320, window.innerWidth - 24);
+  let left = rect.right - width;
+  left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+  let top = rect.bottom + 6;
+  const estimatedHeight = 330;
+  if (top + estimatedHeight > window.innerHeight - 12) top = Math.max(12, rect.top - estimatedHeight - 6);
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
+$('closeParticipantMenu')?.addEventListener('click', closeParticipantMenu);
+$('participantViewProfile')?.addEventListener('click', () => {
+  const person = participantById(state.participantMenuTarget);
+  if (person) openUserProfile(person.nickname);
+  closeParticipantMenu();
+});
+$('participantVolume')?.addEventListener('input', () => {
+  const peerId = state.participantMenuTarget;
+  if (!peerId) return;
+  const value = Math.min(1, Math.max(0, Number($('participantVolume').value || 0) / 100));
+  state.voicePeerVolumes.set(peerId, value);
+  $('participantVolumeValue').textContent = `${Math.round(value * 100)}%`;
+  syncVoicePeerAudio(peerId);
+});
+$('participantMuteForMe')?.addEventListener('click', () => {
+  const peerId = state.participantMenuTarget;
+  if (!peerId) return;
+  if (state.voicePeerMuted.has(peerId)) state.voicePeerMuted.delete(peerId);
+  else state.voicePeerMuted.add(peerId);
+  syncVoicePeerAudio(peerId);
+  renderParticipantMenu();
+});
+$('participantHideCameraForMe')?.addEventListener('click', () => {
+  const peerId = state.participantMenuTarget;
+  if (!peerId) return;
+  if (state.cameraHiddenPeers.has(peerId)) state.cameraHiddenPeers.delete(peerId);
+  else state.cameraHiddenPeers.add(peerId);
+  renderCameraDock();
+  renderParticipantMenu();
+});
+$('participantHostMute')?.addEventListener('click', async () => {
+  const target = state.participantMenuTarget;
+  if (!target) return;
+  const result = await new Promise((resolve) => socket.emit('host-mute-participant', { target }, resolve));
+  if (!result?.ok) return showToast(result?.error || 'Não foi possível silenciar essa pessoa.');
+  showToast('Participante silenciado na call.');
+  closeParticipantMenu();
+});
+$('participantHostKick')?.addEventListener('click', async () => {
+  const person = participantById(state.participantMenuTarget);
+  if (!person) return;
+  if (!confirm(`Remover ${person.nickname} da sala?`)) return;
+  const result = await new Promise((resolve) => socket.emit('host-kick-participant', { target: person.id }, resolve));
+  if (!result?.ok) return showToast(result?.error || 'Não foi possível remover essa pessoa.');
+  showToast(`${person.nickname} foi removido da sala.`);
+  closeParticipantMenu();
+});
+document.addEventListener('pointerdown', (event) => {
+  const menu = $('participantMenu');
+  if (!menu || menu.classList.contains('hidden')) return;
+  if (menu.contains(event.target) || event.target.closest?.('.participant-more')) return;
+  closeParticipantMenu();
+});
+
 function renderRoom() {
   if (!state.room) return;
   const code = state.room.code;
@@ -1289,9 +1574,11 @@ function renderRoom() {
     name.textContent = person.nickname;
     const sub = document.createElement('span');
     if (person.inVoice) {
-      if (person.micMuted) sub.textContent = 'Na call • Mic OFF';
-      else if (person.speaking) sub.textContent = 'Falando agora';
-      else sub.textContent = 'Na call • Em silêncio';
+      const cameraText = person.cameraOn ? ' • Câmera ON' : '';
+      if (person.serverMuted) sub.textContent = `Na call${cameraText} • Mic bloqueado`;
+      else if (person.micMuted) sub.textContent = `Na call${cameraText} • Mic OFF`;
+      else if (person.speaking) sub.textContent = `Falando agora${cameraText}`;
+      else sub.textContent = `Na call${cameraText} • Em silêncio`;
     } else if (person.isSharer) {
       sub.textContent = 'Compartilhando tela';
     } else {
@@ -1305,18 +1592,32 @@ function renderRoom() {
     badges.className = 'participant-badges';
     if (person.isHost) badges.innerHTML += '<b title="Dono da sala">♛</b>';
     if (person.inVoice) {
-      if (person.micMuted) badges.innerHTML += '<span class="voice-badge muted" title="Na call com microfone desligado">🔇</span>';
+      if (person.cameraOn) badges.innerHTML += '<span class="voice-badge camera-badge" title="Câmera ligada">📹</span>';
+      if (person.serverMuted) badges.innerHTML += '<span class="voice-badge muted" title="Microfone bloqueado pelo dono">🔒</span>';
+      else if (person.micMuted) badges.innerHTML += '<span class="voice-badge muted" title="Na call com microfone desligado">🔇</span>';
       else if (person.speaking) badges.innerHTML += '<span class="voice-badge speaking" title="Falando agora">🔊</span>';
       else badges.innerHTML += '<span class="voice-badge" title="Na call de voz">🎙</span>';
     }
     if (person.id === state.me) badges.innerHTML += '<em>VOCÊ</em>';
 
-    row.append(avatar, details, badges);
+    const more = document.createElement('button');
+    more.className = 'participant-more';
+    more.type = 'button';
+    more.textContent = '⋯';
+    more.title = `Opções de ${person.nickname}`;
+    more.addEventListener('click', (event) => {
+      event.stopPropagation();
+      openParticipantMenu(person, more);
+    });
+
+    row.append(avatar, details, badges, more);
     row.classList.add('profile-clickable');
     row.title = `Abrir perfil de ${person.nickname}`;
     row.addEventListener('click', () => openUserProfile(person.nickname));
     $('participantsList').appendChild(row);
   });
+  renderCameraDock();
+  if (state.participantMenuTarget) renderParticipantMenu();
 }
 
 function roomInviteLink() {
@@ -1619,6 +1920,22 @@ function removeVoiceAudio(peerId) {
     audio.remove();
   }
   state.voiceAudios.delete(peerId);
+  state.voiceRemoteStreams.delete(peerId);
+  renderCameraDock();
+}
+
+function voicePeerVolume(peerId) {
+  return Math.min(1, Math.max(0, Number(state.voicePeerVolumes.get(peerId) ?? 1)));
+}
+
+function syncVoicePeerAudio(peerId) {
+  const audio = state.voiceAudios.get(peerId);
+  if (!audio) return;
+  const individualMuted = state.voicePeerMuted.has(peerId);
+  const volume = state.voiceVolume * voicePeerVolume(peerId);
+  audio.muted = state.voiceOutputMuted || individualMuted || volume <= 0;
+  audio.volume = audio.muted ? 0 : Math.min(1, Math.max(0, volume));
+  if (!audio.muted) audio.play().catch(() => {});
 }
 
 function closeVoicePeer(peerId) {
@@ -1634,6 +1951,7 @@ function closeAllVoicePeers() {
 }
 
 function attachRemoteVoice(peerId, stream) {
+  state.voiceRemoteStreams.set(peerId, stream);
   let audio = state.voiceAudios.get(peerId);
   if (!audio) {
     audio = document.createElement('audio');
@@ -1644,9 +1962,8 @@ function attachRemoteVoice(peerId, stream) {
     state.voiceAudios.set(peerId, audio);
   }
   audio.srcObject = stream;
-  audio.muted = state.voiceOutputMuted;
-  audio.volume = state.voiceOutputMuted ? 0 : state.voiceVolume;
-  audio.play().catch(() => {});
+  syncVoicePeerAudio(peerId);
+  renderCameraDock();
 }
 
 async function flushVoiceIce(peerId, pc) {
@@ -1663,7 +1980,7 @@ async function createVoicePeer(peerId, initiator = false) {
 
   const pc = voicePeerConnection();
   state.voicePeers.set(peerId, pc);
-  state.voiceStream.getAudioTracks().forEach((track) => pc.addTrack(track, state.voiceStream));
+  state.voiceStream.getTracks().forEach((track) => pc.addTrack(track, state.voiceStream));
 
   pc.onicecandidate = (event) => {
     if (event.candidate) socket.emit('voice-signal', { target: peerId, data: { type: 'ice', candidate: event.candidate } });
@@ -1744,13 +2061,87 @@ function startVoiceSpeakingDetector(stream) {
 function updateVoiceControls() {
   const call = $('voiceCallControl');
   const mic = $('micControl');
+  const camera = $('cameraControl');
   if (!call || !mic) return;
   call.textContent = state.voiceJoined ? '📞 Sair da call' : '📞 Entrar na call';
   call.classList.toggle('voice-active', state.voiceJoined);
-  mic.disabled = !state.voiceJoined;
-  mic.textContent = state.voiceMuted ? '🔇 Mic OFF' : '🎙 Mic ON';
-  mic.classList.toggle('mic-muted', state.voiceMuted);
+  mic.disabled = !state.voiceJoined || state.voiceServerMuted;
+  mic.textContent = state.voiceServerMuted ? '🔒 Mic bloqueado' : (state.voiceMuted ? '🔇 Mic OFF' : '🎙 Mic ON');
+  mic.classList.toggle('mic-muted', state.voiceMuted || state.voiceServerMuted);
+  if (camera) {
+    camera.disabled = !state.voiceJoined;
+    camera.textContent = state.cameraOn ? '📹 Câmera ON' : '📹 Câmera OFF';
+    camera.classList.toggle('camera-on', state.cameraOn);
+  }
 }
+
+async function renegotiateVoicePeer(peerId, retry = 0) {
+  const pc = state.voicePeers.get(peerId);
+  if (!pc) return;
+  if (pc.signalingState !== 'stable') {
+    if (retry < 5) setTimeout(() => renegotiateVoicePeer(peerId, retry + 1), 300);
+    return;
+  }
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('voice-signal', { target: peerId, data: { type: 'offer', sdp: pc.localDescription } });
+  } catch {}
+}
+
+async function startCamera() {
+  if (!state.voiceJoined || !state.voiceStream || state.cameraOn) return;
+  if (!navigator.mediaDevices?.getUserMedia) return showToast('Seu navegador não permite usar a câmera.');
+  try {
+    const cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } },
+      audio: false
+    });
+    const track = cameraStream.getVideoTracks()[0];
+    if (!track) return;
+    state.cameraTrack = track;
+    state.cameraOn = true;
+    state.voiceStream.addTrack(track);
+    track.addEventListener('ended', () => stopCamera(true), { once: true });
+
+    for (const [peerId, pc] of state.voicePeers.entries()) {
+      pc.addTrack(track, state.voiceStream);
+      renegotiateVoicePeer(peerId);
+    }
+    socket.emit('voice-camera-state', { on: true }, () => {});
+    updateVoiceControls();
+    renderCameraDock();
+    showToast('Câmera ligada.');
+  } catch (error) {
+    if (error?.name === 'NotAllowedError') showToast('Permita o acesso à câmera.');
+    else showToast('Não foi possível abrir a câmera.');
+  }
+}
+
+function stopCamera(notifyServer = true) {
+  if (!state.cameraOn && !state.cameraTrack) return;
+  const track = state.cameraTrack;
+  for (const [peerId, pc] of state.voicePeers.entries()) {
+    const sender = pc.getSenders().find((item) => item.track === track || item.track?.kind === 'video');
+    if (sender) {
+      try { pc.removeTrack(sender); } catch {}
+      renegotiateVoicePeer(peerId);
+    }
+  }
+  try { state.voiceStream?.removeTrack(track); } catch {}
+  try { track?.stop(); } catch {}
+  state.cameraTrack = null;
+  state.cameraOn = false;
+  if (notifyServer) socket.emit('voice-camera-state', { on: false }, () => {});
+  updateVoiceControls();
+  renderCameraDock();
+}
+
+$('cameraControl')?.addEventListener('click', () => {
+  if (!state.voiceJoined) return;
+  if (state.cameraOn) stopCamera(true);
+  else startCamera();
+});
 
 async function joinVoiceCall() {
   if (!state.room || state.voiceJoined) return;
@@ -1776,6 +2167,7 @@ async function joinVoiceCall() {
     state.voiceStream = stream;
     state.voiceJoined = true;
     state.voiceMuted = false;
+    state.voiceServerMuted = false;
     startVoiceSpeakingDetector(stream);
     updateVoiceControls();
     showToast('Você entrou na call de voz.');
@@ -1793,20 +2185,32 @@ async function leaveVoiceCall(notifyServer = true) {
   if (notifyServer && state.voiceJoined) {
     await new Promise((resolve) => socket.emit('leave-voice', {}, resolve));
   }
+  stopCamera(false);
   closeAllVoicePeers();
   stopVoiceSpeakingDetector(true);
   state.voiceStream?.getTracks().forEach((track) => track.stop());
   state.voiceStream = null;
   state.voiceJoined = false;
   state.voiceMuted = false;
+  state.voiceServerMuted = false;
   updateVoiceControls();
 }
 
-function toggleVoiceMic() {
+async function toggleVoiceMic() {
   if (!state.voiceJoined || !state.voiceStream) return;
-  state.voiceMuted = !state.voiceMuted;
+  if (state.voiceServerMuted) return showToast('Seu microfone está bloqueado pelo dono da sala.');
+  const nextMuted = !state.voiceMuted;
+  const result = await new Promise((resolve) => socket.emit('voice-mic-state', { muted: nextMuted }, resolve));
+  if (!result?.ok) {
+    if (result?.serverMuted) state.voiceServerMuted = true;
+    state.voiceMuted = true;
+    state.voiceStream.getAudioTracks().forEach((track) => { track.enabled = false; });
+    setLocalSpeakingState(false);
+    updateVoiceControls();
+    return showToast(result?.error || 'Não foi possível alterar o microfone.');
+  }
+  state.voiceMuted = nextMuted;
   state.voiceStream.getAudioTracks().forEach((track) => { track.enabled = !state.voiceMuted; });
-  socket.emit('voice-mic-state', { muted: state.voiceMuted }, () => {});
   if (state.voiceMuted) setLocalSpeakingState(false);
   updateVoiceControls();
 }
@@ -1817,8 +2221,51 @@ $('voiceCallControl').addEventListener('click', () => {
 });
 $('micControl').addEventListener('click', toggleVoiceMic);
 
+socket.on('voice-force-muted', () => {
+  if (!state.voiceJoined || !state.voiceStream) return;
+  state.voiceServerMuted = true;
+  state.voiceMuted = true;
+  state.voiceStream.getAudioTracks().forEach((track) => { track.enabled = false; });
+  setLocalSpeakingState(false);
+  updateVoiceControls();
+  showToast('O dono da sala bloqueou seu microfone.');
+});
+
+socket.on('voice-server-mute-released', () => {
+  state.voiceServerMuted = false;
+  state.voiceMuted = true;
+  updateVoiceControls();
+  showToast('O dono liberou seu microfone. Clique em Mic OFF para ligá-lo quando quiser.');
+});
+
+socket.on('kicked-from-room', async ({ reason } = {}) => {
+  stopSharing(false);
+  await leaveVoiceCall(false);
+  closeAllInboundPeers();
+  state.room = null;
+  state.me = null;
+  state.participants = [];
+  state.chatMessages = [];
+  state.sharerIds.clear();
+  state.inboundStreams.clear();
+  state.cameraHiddenPeers.clear();
+  state.voicePeerMuted.clear();
+  state.voicePeerVolumes.clear();
+  closeParticipantMenu();
+  $('cameraGrid').innerHTML = '';
+  $('cameraDock').classList.add('hidden');
+  history.replaceState({}, '', '/');
+  setView('landing');
+  loadPublicRooms();
+  showToast(reason || 'Você foi removido da sala.');
+});
+
 socket.on('voice-user-left', ({ userId }) => {
   closeVoicePeer(userId);
+  state.voicePeerMuted.delete(userId);
+  state.voicePeerVolumes.delete(userId);
+  state.cameraHiddenPeers.delete(userId);
+  renderCameraDock();
 });
 
 socket.on('voice-signal', async ({ from, data }) => {
@@ -1959,11 +2406,7 @@ function syncTransmissionAudio() {
 }
 
 function syncVoiceOutputVolume() {
-  for (const audio of state.voiceAudios.values()) {
-    audio.muted = state.voiceOutputMuted || state.voiceVolume <= 0;
-    audio.volume = audio.muted ? 0 : state.voiceVolume;
-    if (!audio.muted) audio.play().catch(() => {});
-  }
+  for (const peerId of state.voiceAudios.keys()) syncVoicePeerAudio(peerId);
 }
 
 function updateMixerUI() {
@@ -2000,6 +2443,7 @@ function setTransmissionVolume(value) {
   syncTransmissionAudio();
   updateMixerUI();
   updateAudioControl();
+  savePreferencesToAccountSoon();
 }
 
 function setVoiceVolume(value) {
@@ -2009,6 +2453,7 @@ function setVoiceVolume(value) {
   localStorage.setItem('lnz_voice_output_muted', state.voiceOutputMuted ? '1' : '0');
   syncVoiceOutputVolume();
   updateMixerUI();
+  savePreferencesToAccountSoon();
 }
 
 async function flushScreenIce(map, key, pc) {
@@ -2204,11 +2649,13 @@ $('audioControl').addEventListener('click', () => {
     syncTransmissionAudio();
     updateAudioControl();
     updateMixerUI();
+    savePreferencesToAccountSoon();
     return;
   }
   if (state.isSharing) return;
   state.shareAudio = !state.shareAudio;
   updateAudioControl();
+  savePreferencesToAccountSoon();
   showToast(state.shareAudio ? 'Áudio ativado para a próxima transmissão.' : 'Áudio da transmissão desativado.');
 });
 
@@ -2223,12 +2670,14 @@ $('mixerToggleTransmission')?.addEventListener('click', () => {
   syncTransmissionAudio();
   updateAudioControl();
   updateMixerUI();
+  savePreferencesToAccountSoon();
 });
 $('mixerToggleVoice')?.addEventListener('click', () => {
   state.voiceOutputMuted = !state.voiceOutputMuted;
   localStorage.setItem('lnz_voice_output_muted', state.voiceOutputMuted ? '1' : '0');
   syncVoiceOutputVolume();
   updateMixerUI();
+  savePreferencesToAccountSoon();
 });
 
 $('shareFromEmpty').addEventListener('click', startSharing);
@@ -2251,6 +2700,12 @@ async function leaveRoom() {
   state.unreadChat = 0;
   state.sharerIds.clear();
   state.inboundStreams.clear();
+  state.voicePeerMuted.clear();
+  state.voicePeerVolumes.clear();
+  state.cameraHiddenPeers.clear();
+  closeParticipantMenu();
+  $('cameraGrid').innerHTML = '';
+  $('cameraDock').classList.add('hidden');
   clearSelectedChatFile();
   closeChat();
   updateChatUnread();
@@ -2265,6 +2720,14 @@ socket.on('room-state', ({ room, participants, sharerIds }) => {
   if (!state.room || room.code !== state.room.code) return;
   state.room = room;
   state.participants = participants || [];
+  const currentVoiceMe = state.participants.find((person) => person.id === state.me);
+  if (currentVoiceMe) {
+    state.voiceServerMuted = Boolean(currentVoiceMe.serverMuted);
+    if (state.voiceServerMuted) {
+      state.voiceMuted = true;
+      state.voiceStream?.getAudioTracks().forEach((track) => { track.enabled = false; });
+    }
+  }
   state.sharerIds = new Set(sharerIds || []);
   if (state.isSharing && state.me) state.sharerIds.add(state.me);
 
@@ -2618,6 +3081,7 @@ document.querySelectorAll('.admin-tab').forEach((button) => button.addEventListe
 
 async function initApp() {
   $('year').textContent = new Date().getFullYear();
+  if ($('authRemember')) $('authRemember').checked = localStorage.getItem('lnz_remember_login') === '1';
   updateAudioControl();
   updateMixerUI();
   applyDiscordLinks();
