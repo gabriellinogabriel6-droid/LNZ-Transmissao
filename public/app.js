@@ -87,22 +87,30 @@ function setAuthMode(mode) {
   state.authMode = ['register', 'recover'].includes(mode) ? mode : 'login';
   const register = state.authMode === 'register';
   const recover = state.authMode === 'recover';
-  $('authLoginTab')?.classList.toggle('active', state.authMode === 'login');
-  $('authRegisterTab')?.classList.toggle('active', register);
-  $('authRecoverTab')?.classList.toggle('active', recover);
+  const login = state.authMode === 'login';
+
   $('authConfirmWrap')?.classList.toggle('hidden', !(register || recover));
   $('authRecoveryCodeWrap')?.classList.toggle('hidden', !recover);
   $('authRememberWrap')?.classList.toggle('hidden', recover);
-  $('forgotPasswordButton')?.classList.toggle('hidden', recover);
-  if ($('authTitle')) $('authTitle').textContent = register ? 'Criar sua conta' : (recover ? 'Recuperar sua conta' : 'Entrar na sua conta');
-  if ($('authSubmit')) $('authSubmit').textContent = register ? 'Criar conta' : (recover ? 'Trocar senha e entrar' : 'Entrar');
+  $('authLoginActions')?.classList.toggle('hidden', !login);
+  $('authBackToLogin')?.classList.toggle('hidden', login);
+  $('chooseAnotherUsername')?.classList.add('hidden');
+
+  if ($('authEyebrow')) $('authEyebrow').textContent = register ? 'CRIE SUA CONTA' : (recover ? 'RECUPERAÇÃO DE CONTA' : 'BEM-VINDO DE VOLTA');
+  if ($('authTitle')) $('authTitle').textContent = register ? 'Escolha seu usuário' : (recover ? 'Recuperar acesso' : 'Entrar na sua conta');
+  if ($('authSubtitle')) $('authSubtitle').textContent = register
+    ? 'Crie um usuário único para usar todos os recursos do LNZ.'
+    : (recover ? 'Use seu código de recuperação para definir uma nova senha.' : 'Entre para acessar suas salas, perfil, amigos e configurações.');
+  if ($('authSubmit')) $('authSubmit').textContent = register ? 'Criar minha conta' : (recover ? 'Salvar nova senha' : 'Entrar');
   if ($('authPasswordLabel')) $('authPasswordLabel').textContent = recover ? 'NOVA SENHA' : 'SENHA';
+  if ($('authUsernameHelper')) $('authUsernameHelper').textContent = register ? 'O nome precisa ser único e ter de 3 a 24 caracteres.' : 'Digite o usuário da sua conta.';
   if ($('authPassword')) {
     $('authPassword').autocomplete = register || recover ? 'new-password' : 'current-password';
-    $('authPassword').placeholder = recover ? 'Digite sua nova senha' : 'Sua senha';
+    $('authPassword').placeholder = recover ? 'Crie uma nova senha' : (register ? 'Crie uma senha segura' : 'Digite sua senha');
   }
-  if ($('authPasswordConfirm')) $('authPasswordConfirm').placeholder = recover ? 'Repita a nova senha' : 'Digite a senha novamente';
+  if ($('authPasswordConfirm')) $('authPasswordConfirm').placeholder = recover ? 'Repita a nova senha' : 'Repita sua senha';
   $('authError')?.classList.add('hidden');
+  setUsernameAvailability();
 }
 
 function updateAccountUI() {
@@ -249,14 +257,17 @@ let lastUsernameAvailability = null;
 
 function setUsernameAvailability(message = '', type = '') {
   const el = $('authUsernameStatus');
+  const chooseAnother = $('chooseAnotherUsername');
   if (!el) return;
   if (!message) {
     el.textContent = '';
     el.className = 'auth-username-status hidden';
+    chooseAnother?.classList.add('hidden');
     return;
   }
   el.textContent = message;
   el.className = `auth-username-status ${type}`;
+  chooseAnother?.classList.toggle('hidden', type !== 'taken');
 }
 
 async function checkUsernameAvailability() {
@@ -831,11 +842,19 @@ async function checkAppVersion() {
 $('accountButton')?.addEventListener('click', () => openAuthModal(false));
 $('accountLogoutQuick')?.addEventListener('click', logoutAccount);
 $('authLogout')?.addEventListener('click', logoutAccount);
-$('authLoginTab')?.addEventListener('click', () => setAuthMode('login'));
-$('authRegisterTab')?.addEventListener('click', () => setAuthMode('register'));
-$('authRecoverTab')?.addEventListener('click', () => setAuthMode('recover'));
 $('authRemember')?.addEventListener('change', () => localStorage.setItem('lnz_remember_login', $('authRemember').checked ? '1' : '0'));
 $('forgotPasswordButton')?.addEventListener('click', () => setAuthMode('recover'));
+$('authCreateAccountButton')?.addEventListener('click', () => { setAuthMode('register'); setTimeout(() => $('authUsername')?.focus(), 50); });
+$('authBackToLogin')?.addEventListener('click', () => { setAuthMode('login'); setTimeout(() => $('authUsername')?.focus(), 50); });
+$('toggleAuthPassword')?.addEventListener('click', () => {
+  const input = $('authPassword');
+  const button = $('toggleAuthPassword');
+  if (!input || !button) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  button.textContent = show ? '◌' : '◉';
+  button.title = show ? 'Ocultar senha' : 'Mostrar senha';
+});
 $('chooseAnotherUsername')?.addEventListener('click', () => {
   setAuthMode('register');
   if ($('authUsername')) $('authUsername').value = '';

@@ -278,3 +278,13 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - Adicionado botão **Escolher outro nome**.
 - Se o nome já existir, o site avisa e pede outro nome.
 - O botão limpa os campos e abre diretamente a criação de conta.
+
+
+## Login simplificado
+
+- Removidas as três abas grandes de Entrar / Criar conta / Recuperar.
+- A tela abre direto no login.
+- **Criar conta** e **Esqueci minha senha** ficam como atalhos simples abaixo do botão Entrar.
+- Nas telas de cadastro/recuperação há um botão **Voltar para entrar**.
+- Campo de senha com mostrar/ocultar.
+- A criação de conta continua verificando usuário único.

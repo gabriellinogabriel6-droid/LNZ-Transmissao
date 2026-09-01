@@ -428,49 +428,57 @@
 
   <div id="authModal" class="modal hidden" aria-hidden="true">
     <div class="modal-backdrop" data-close-auth="true"></div>
-    <div class="modal-card glass-card auth-card">
-      <div class="modal-head">
-        <div><span>CONTA LNZ</span><h2 id="authTitle">Entrar na sua conta</h2></div>
+    <div class="modal-card glass-card auth-card auth-card-modern">
+      <div class="auth-brandline">
+        <img src="/assets/logo.png" alt="LNZ" />
+        <div><strong>LNZ</strong><span>Conta segura</span></div>
         <button id="closeAuth" class="modal-close" type="button">×</button>
       </div>
 
       <div id="authLoggedOut">
-        <div class="auth-tabs">
-          <button id="authLoginTab" class="auth-tab active" type="button">Entrar</button>
-          <button id="authRegisterTab" class="auth-tab" type="button">Criar conta</button>
-          <button id="authRecoverTab" class="auth-tab" type="button">Recuperar</button>
+        <div class="auth-welcome">
+          <span id="authEyebrow">BEM-VINDO DE VOLTA</span>
+          <h2 id="authTitle">Entrar na sua conta</h2>
+          <p id="authSubtitle">Entre para acessar suas salas, perfil, amigos e configurações.</p>
         </div>
 
-        <div class="field">
-          <label for="authUsername">LOGIN</label>
-          <input id="authUsername" maxlength="24" autocomplete="username" placeholder="Seu login" />
-          <small class="helper">3 a 24 caracteres: letras, números, ponto, hífen ou _.</small>
+        <button id="authBackToLogin" class="auth-back-link hidden" type="button">← Voltar para entrar</button>
+
+        <div class="field auth-modern-field">
+          <label for="authUsername">USUÁRIO</label>
+          <div class="auth-input-shell"><span>👤</span><input id="authUsername" maxlength="24" autocomplete="username" placeholder="Digite seu usuário" /></div>
+          <small id="authUsernameHelper" class="helper">Use de 3 a 24 caracteres.</small>
           <small id="authUsernameStatus" class="auth-username-status hidden"></small>
         </div>
         <div id="authRecoveryCodeWrap" class="field auth-field-gap hidden">
           <label for="authRecoveryCode">CÓDIGO DE RECUPERAÇÃO</label>
-          <input id="authRecoveryCode" maxlength="40" autocomplete="off" placeholder="LNZ-XXXX-XXXX-XXXX-XXXX-XXXX" />
-          <small class="helper">Use o código que foi mostrado quando você criou a conta.</small>
+          <div class="auth-input-shell"><span>🔑</span><input id="authRecoveryCode" maxlength="40" autocomplete="off" placeholder="LNZ-XXXX-XXXX-XXXX-XXXX-XXXX" /></div>
+          <small class="helper">Digite o código de recuperação da sua conta.</small>
         </div>
         <div class="field auth-field-gap">
           <label id="authPasswordLabel" for="authPassword">SENHA</label>
-          <input id="authPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Sua senha" />
+          <div class="auth-input-shell"><span>🔒</span><input id="authPassword" type="password" maxlength="72" autocomplete="current-password" placeholder="Digite sua senha" /><button id="toggleAuthPassword" class="password-eye" type="button" title="Mostrar senha">◉</button></div>
         </div>
         <div id="authConfirmWrap" class="field auth-field-gap hidden">
           <label for="authPasswordConfirm">CONFIRMAR SENHA</label>
-          <input id="authPasswordConfirm" type="password" maxlength="72" autocomplete="new-password" placeholder="Digite a senha novamente" />
+          <div class="auth-input-shell"><span>✓</span><input id="authPasswordConfirm" type="password" maxlength="72" autocomplete="new-password" placeholder="Digite novamente" /></div>
         </div>
-        <label id="authRememberWrap" class="remember-login-row">
+        <label id="authRememberWrap" class="remember-login-row remember-login-modern">
           <input id="authRemember" type="checkbox" />
           <span>
             <strong>Manter conectado</strong>
-            <small>Não pedir login novamente neste dispositivo.</small>
+            <small>Continuar conectado neste dispositivo.</small>
           </span>
         </label>
         <div id="authError" class="auth-error hidden"></div>
-        <button id="authSubmit" class="btn btn-primary btn-wide" type="button">Entrar</button>
-        <button id="forgotPasswordButton" class="auth-link-btn" type="button">Esqueci minha senha</button>
-        <button id="chooseAnotherUsername" class="auth-link-btn choose-another-user" type="button">Escolher outro nome</button>
+        <button id="authSubmit" class="btn btn-primary btn-wide auth-main-submit" type="button">Entrar</button>
+
+        <div id="authLoginActions" class="auth-simple-actions">
+          <button id="forgotPasswordButton" class="auth-link-btn" type="button">Esqueci minha senha</button>
+          <span>•</span>
+          <button id="authCreateAccountButton" class="auth-link-btn auth-create-link" type="button">Criar conta</button>
+        </div>
+        <button id="chooseAnotherUsername" class="auth-link-btn choose-another-user hidden" type="button">Escolher outro nome</button>
       </div>
 
       <div id="authLoggedIn" class="auth-logged-in hidden">
