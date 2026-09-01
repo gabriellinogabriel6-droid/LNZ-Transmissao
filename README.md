@@ -420,3 +420,12 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - Elementos de fundo não podem bloquear cliques.
 - Telas landing/prejoin/room ficam estritamente separadas.
 - Socket.IO recebeu tolerância maior para redes móveis.
+
+
+## Correção Render 502
+
+- O servidor HTTP agora abre a porta imediatamente, antes de esperar PostgreSQL.
+- PostgreSQL inicializa em segundo plano e tem timeout de conexão.
+- Health check rápido em `/healthz`.
+- `render.yaml` usa `/healthz`.
+- O site continua funcional em memória mesmo se o banco externo estiver lento.

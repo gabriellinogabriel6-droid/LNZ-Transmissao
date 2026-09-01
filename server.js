@@ -23,7 +23,9 @@ app.use(express.json({ limit: '24mb' }));
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const dbPool = DATABASE_URL ? new Pool({
   connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  connectionTimeoutMillis: 5000,
+  idleTimeoutMillis: 30000
 }) : null;
 let databaseReady = false;
 const memoryUsers = new Map();
@@ -784,6 +786,9 @@ app.use(express.static(path.join(__dirname, 'public'), {
     }
   }
 }));
+
+app.get('/healthz', (_req, res) => res.status(200).send('ok'));
+app.get('/ready', (_req, res) => res.status(200).json({ ok: true, database: databaseReady ? 'postgres' : 'memory' }));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, rooms: rooms.size, feedbacks: feedbackItems.length, database: databaseReady ? 'postgres' : 'memory' });
@@ -1641,9 +1646,24 @@ io.on('connection', async (socket) => {
   });
 });
 
-initDatabase().finally(() => {
-  logActivity({ action: 'system.start', details: { version: APP_VERSION, database: databaseReady ? 'postgres' : 'memory' } }).catch(() => {});
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`LNZ Transmissão online em http://localhost:${PORT}`);
-  });
+// Sobe o HTTP imediatamente. No Render isso evita 502 durante o boot
+// caso o PostgreSQL externo esteja lento, dormindo ou temporariamente indisponível.
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+
+server.on('error', (error) => {
+  console.error('[Servidor] Erro HTTP:', error?.message || error);
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`LNZ Transmissão online em http://0.0.0.0:${PORT}`);
+
+  // Banco inicializa em segundo plano. O site continua funcional em memória
+  // enquanto a conexão persistente não estiver pronta.
+  initDatabase()
+    .then(() => logActivity({
+      action: 'system.start',
+      details: { version: APP_VERSION, database: databaseReady ? 'postgres' : 'memory' }
+    }).catch(() => {}))
+    .catch((error) => console.error('[Banco] Inicialização em segundo plano falhou:', error?.message || error));
 });
