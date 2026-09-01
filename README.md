@@ -270,3 +270,11 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - Na aba **Criar conta**, o nome é verificado enquanto a pessoa digita.
 - Nomes são únicos sem diferenciar maiúsculas/minúsculas: `Linozera` e `linozera` contam como o mesmo usuário.
 - Sem PostgreSQL, as contas funcionam na memória do servidor e podem ser perdidas quando o Render reiniciar. Para nomes e contas permanecerem reservados para sempre, ainda é necessário um banco persistente.
+
+
+## Escolher outro nome
+
+- Removida a mensagem de status do banco da tela de login.
+- Adicionado botão **Escolher outro nome**.
+- Se o nome já existir, o site avisa e pede outro nome.
+- O botão limpa os campos e abre diretamente a criação de conta.

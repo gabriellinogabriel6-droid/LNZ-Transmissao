@@ -1229,3 +1229,6 @@ input:focus, textarea:focus { border-color: var(--accent) !important; box-shadow
 .auth-username-status.available { color:#64e6a1; }
 .auth-username-status.taken, .auth-username-status.invalid { color:#ff8798; }
 .auth-username-status.checking { color:#a99dbc; }
+
+.choose-another-user { margin-top: 4px; color: #cbb7ff; }
+.choose-another-user:hover { color: #fff; }

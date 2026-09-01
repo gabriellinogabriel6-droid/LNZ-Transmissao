@@ -197,11 +197,6 @@ async function loadAccount() {
     const response = await fetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store' });
     const data = await response.json();
     state.account = data?.user || null;
-    if ($('authDatabaseStatus')) {
-      $('authDatabaseStatus').textContent = data?.persistentDatabase
-        ? 'Conta salva e nome de usuário exclusivo.'
-        : 'Nome de usuário exclusivo enquanto o servidor estiver online.';
-    }
   } catch {
     state.account = null;
   }
@@ -282,7 +277,7 @@ async function checkUsernameAvailability() {
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data?.ok) throw new Error('Falha');
     lastUsernameAvailability = Boolean(data.available);
-    setUsernameAvailability(data.available ? '✓ Usuário disponível' : '✕ Esse usuário já existe', data.available ? 'available' : 'taken');
+    setUsernameAvailability(data.available ? '✓ Usuário disponível' : '✕ Esse nome já existe — escolha outro nome', data.available ? 'available' : 'taken');
   } catch {
     lastUsernameAvailability = null;
     setUsernameAvailability('Não foi possível verificar agora.', 'checking');
@@ -310,12 +305,12 @@ async function submitAuth() {
 
   if (state.authMode === 'register') {
     if (lastUsernameAvailability === false) {
-      if (error) { error.textContent = 'Esse nome de usuário já está em uso. Escolha outro.'; error.classList.remove('hidden'); }
+      if (error) { error.textContent = 'Esse nome já existe. Escolha outro nome.'; error.classList.remove('hidden'); }
       return;
     }
     if (lastUsernameAvailability === null) await checkUsernameAvailability();
     if (lastUsernameAvailability === false) {
-      if (error) { error.textContent = 'Esse nome de usuário já está em uso. Escolha outro.'; error.classList.remove('hidden'); }
+      if (error) { error.textContent = 'Esse nome já existe. Escolha outro nome.'; error.classList.remove('hidden'); }
       return;
     }
   }
@@ -497,8 +492,10 @@ function renderEditProfileAvatar() {
 }
 
 
-async function saveAvatarToAccountSilently() {
-  if (!state.account) return;
+async function saveAvatarToAccountSilently({ throwOnError = false } = {}) {
+  // Sempre mantém o ajuste no dispositivo atual.
+  persistAvatarState();
+  if (!state.account) return { ok: true, localOnly: true };
   try {
     const data = await apiJson('/api/profile/update', {
       method: 'POST',
@@ -513,8 +510,11 @@ async function saveAvatarToAccountSilently() {
       })
     });
     state.account = { ...state.account, ...data.profile };
-  } catch {
-    // Continua funcionando localmente; o botão Salvar perfil permite tentar novamente.
+    persistAvatarState();
+    return { ok: true, localOnly: false, profile: data.profile };
+  } catch (error) {
+    if (throwOnError) throw error;
+    return { ok: false, error };
   }
 }
 
@@ -836,6 +836,15 @@ $('authRegisterTab')?.addEventListener('click', () => setAuthMode('register'));
 $('authRecoverTab')?.addEventListener('click', () => setAuthMode('recover'));
 $('authRemember')?.addEventListener('change', () => localStorage.setItem('lnz_remember_login', $('authRemember').checked ? '1' : '0'));
 $('forgotPasswordButton')?.addEventListener('click', () => setAuthMode('recover'));
+$('chooseAnotherUsername')?.addEventListener('click', () => {
+  setAuthMode('register');
+  if ($('authUsername')) $('authUsername').value = '';
+  if ($('authPassword')) $('authPassword').value = '';
+  if ($('authPasswordConfirm')) $('authPasswordConfirm').value = '';
+  lastUsernameAvailability = null;
+  setUsernameAvailability('Digite um nome novo para verificar se está disponível.', 'checking');
+  setTimeout(() => $('authUsername')?.focus(), 50);
+});
 $('regenerateRecoveryCode')?.addEventListener('click', regenerateRecoveryCode);
 $('copyRecoveryCode')?.addEventListener('click', copyRecoveryCodeValue);
 $('closeRecoveryCode')?.addEventListener('click', closeRecoveryCodeModal);
@@ -1038,7 +1047,6 @@ $('avatarInput').addEventListener('change', (event) => {
     persistAvatarState();
     updateAvatarUI();
     renderEditProfileAvatar();
-    saveAvatarToAccountSilently();
   };
   reader.readAsDataURL(file);
 });
@@ -1175,16 +1183,32 @@ $('resetAvatarZoom').addEventListener('click', () => {
   $('avatarPositionY').value = '0';
   updateAvatarEditorPreview();
 });
-$('saveAvatarEditor').addEventListener('click', () => {
+$('saveAvatarEditor').addEventListener('click', async () => {
+  const button = $('saveAvatarEditor');
   state.avatarScale = Math.min(3, Math.max(0.5, Number($('avatarZoom').value || 1)));
   state.avatarOffsetX = clampAvatarAxis($('avatarPositionX').value);
   state.avatarOffsetY = clampAvatarAxis($('avatarPositionY').value);
   persistAvatarState();
   updateAvatarUI();
   renderEditProfileAvatar();
-  saveAvatarToAccountSilently();
-  closeAvatarEditor();
-  showToast('Foto ajustada.');
+
+  const previousText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Salvando...';
+  try {
+    const result = await saveAvatarToAccountSilently({ throwOnError: true });
+    closeAvatarEditor();
+    if (result.localOnly) {
+      showToast('Foto/GIF salva neste dispositivo. Entre na conta para salvar no perfil.');
+    } else {
+      showToast('Foto/GIF salva na sua conta.');
+    }
+  } catch (error) {
+    showToast(error?.message || 'Não foi possível salvar a foto/GIF.');
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText || 'Salvar foto/GIF';
+  }
 });
 
 $('landingNickname').addEventListener('input', () => {

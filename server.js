@@ -10,13 +10,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: true, credentials: true },
-  maxHttpBufferSize: 16e6
+  maxHttpBufferSize: 24e6
 });
 
 const PORT = Number(process.env.PORT) || 3000;
 const rooms = new Map();
 
-app.use(express.json({ limit: '16mb' }));
+app.use(express.json({ limit: '24mb' }));
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const dbPool = DATABASE_URL ? new Pool({
@@ -615,7 +615,9 @@ app.post('/api/profile/update', async (req,res) => {
   try {
     const user = await currentUserFromRequest(req);
     if (!user) return res.status(401).json({ok:false,error:'Faça login.'});
-    const avatar = cleanAvatar(req.body?.avatar);
+    const rawAvatar = String(req.body?.avatar || '');
+    const avatar = cleanAvatar(rawAvatar);
+    if (rawAvatar && !avatar) return res.status(413).json({ok:false,error:'A foto/GIF é inválida ou passou do limite permitido.'});
     const avatarScale = cleanAvatarScale(req.body?.avatarScale);
     const avatarX = cleanAvatarOffsetX(req.body?.avatarOffsetX);
     const avatarY = cleanAvatarOffsetY(req.body?.avatarOffsetY);
@@ -630,7 +632,7 @@ app.post('/api/profile/update', async (req,res) => {
     const profile = await getUserProfileById(user.id);
     emitToAccount(user.id,'profile-updated',{profile});
     res.json({ok:true,profile});
-  } catch (error) { res.status(500).json({ok:false,error:'Não foi possível salvar o perfil.'}); }
+  } catch (error) { console.error('[Perfil] Falha ao salvar:', error?.message || error); res.status(500).json({ok:false,error:'Não foi possível salvar a foto/perfil no servidor.'}); }
 });
 
 
