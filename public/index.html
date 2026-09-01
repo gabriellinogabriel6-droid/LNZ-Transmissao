@@ -218,7 +218,6 @@
         <span></span>
         <button id="voiceCallControl" class="control-voice" type="button" title="Entrar na call de voz">📞 Entrar na call</button>
         <button id="micControl" class="control-voice mic-control" type="button" title="Ligar/desligar microfone" disabled>🎙 Mic ON</button>
-        <button id="cameraControl" class="control-voice camera-control" type="button" title="Ligar/desligar câmera" disabled>📹 Câmera OFF</button>
         <span></span>
         <button id="audioControl" class="control-audio" type="button" title="Ativar áudio da aba na próxima transmissão">🔇 Áudio OFF</button>
         <button id="mixerControl" class="control-audio mixer-open-btn" type="button" title="Mix de volume">🎚 Mix</button>
@@ -261,14 +260,6 @@
         </div>
       </div>
 
-      <div id="cameraDock" class="camera-dock hidden" aria-label="Câmeras da call">
-        <div class="camera-dock-head">
-          <div><strong>Call de vídeo</strong><span id="cameraCountLabel">0 câmeras</span></div>
-          <button id="toggleCameraDock" type="button" title="Minimizar câmeras">−</button>
-        </div>
-        <div id="cameraGrid" class="camera-grid"></div>
-      </div>
-
       <div id="voiceAudioContainer" class="voice-audio-container" aria-hidden="true"></div>
     </section>
 
@@ -307,26 +298,6 @@
       <div class="chat-hint">Arquivos de até 2 MB • executáveis bloqueados</div>
     </aside>
   </main>
-
-  <div id="participantMenu" class="participant-menu hidden" role="dialog" aria-label="Opções do participante">
-    <div class="participant-menu-head">
-      <div id="participantMenuAvatar" class="participant-menu-avatar">?</div>
-      <div><strong id="participantMenuName">Participante</strong><span id="participantMenuStatus">Conectado</span></div>
-      <button id="closeParticipantMenu" type="button">×</button>
-    </div>
-    <button id="participantViewProfile" class="participant-menu-action" type="button">👤 Ver perfil</button>
-    <div id="participantVolumeWrap" class="participant-volume-wrap">
-      <div class="participant-volume-title"><span>🔊 Volume para mim</span><b id="participantVolumeValue">100%</b></div>
-      <input id="participantVolume" type="range" min="0" max="100" step="1" value="100" />
-    </div>
-    <button id="participantMuteForMe" class="participant-menu-action" type="button">🔇 Silenciar para mim</button>
-    <button id="participantHideCameraForMe" class="participant-menu-action" type="button">📹 Ocultar câmera para mim</button>
-    <div id="participantHostActions" class="participant-host-actions hidden">
-      <span>CONTROLES DO DONO</span>
-      <button id="participantHostMute" class="participant-menu-action danger-soft" type="button">🔇 Silenciar na sala</button>
-      <button id="participantHostKick" class="participant-menu-action danger" type="button">↪ Remover da sala</button>
-    </div>
-  </div>
 
   <div id="createModal" class="modal hidden" aria-hidden="true">
     <div class="modal-backdrop" data-close-modal="true"></div>
@@ -459,13 +430,6 @@
           <label for="authPasswordConfirm">CONFIRMAR SENHA</label>
           <input id="authPasswordConfirm" type="password" maxlength="72" autocomplete="new-password" placeholder="Digite a senha novamente" />
         </div>
-        <label id="authRememberWrap" class="remember-login-row">
-          <input id="authRemember" type="checkbox" />
-          <span>
-            <strong>Manter conectado</strong>
-            <small>Não pedir login novamente neste dispositivo.</small>
-          </span>
-        </label>
         <div id="authError" class="auth-error hidden"></div>
         <button id="authSubmit" class="btn btn-primary btn-wide" type="button">Entrar</button>
         <button id="forgotPasswordButton" class="auth-link-btn" type="button">Esqueci minha senha</button>
