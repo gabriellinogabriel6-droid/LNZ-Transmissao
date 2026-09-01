@@ -349,3 +349,18 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - Troca entre câmera frontal e traseira.
 - Compartilhamento de tela usa getDisplayMedia quando o navegador móvel oferece suporte.
 - Quando o navegador do celular não oferece captura de tela, o app orienta usar a câmera.
+
+
+## LNZ PRO Leve
+
+- Interface redesenhada: mais limpa, escura e profissional.
+- Halloween mais discreto: somente 3 fantasmas na tela inicial.
+- Sala sem barra Discord extra.
+- Controles compactos e flutuantes.
+- Mobile redesenhado com menu gaveta, controles grandes, câmera e volume por toque.
+- Fundo convertido de PNG pesado para WebP otimizado.
+- Versão mobile separada do fundo para economizar dados.
+- Logo otimizada em WebP.
+- Google Fonts removido; usa fontes do próprio sistema.
+- Cache leve de arquivos estáticos no servidor.
+- Funções de transmissão, call, câmera, câmera frontal/traseira, chat, mixer e modo foco preservadas.

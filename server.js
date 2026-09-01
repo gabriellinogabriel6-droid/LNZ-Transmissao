@@ -772,7 +772,8 @@ app.post('/api/friends/remove', async (req,res) => {
 
 
 app.disable('x-powered-by');
-app.use(express.static(path.join(__dirname, 'public')));
+app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), { maxAge: '1d', etag: true }));
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '5m', etag: true }));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, rooms: rooms.size, feedbacks: feedbackItems.length, database: databaseReady ? 'postgres' : 'memory' });

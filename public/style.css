@@ -42,7 +42,7 @@ button { color: inherit; }
   position: absolute;
   inset: -5%;
   z-index: -1;
-  background-image: linear-gradient(rgba(7, 3, 14, .44), rgba(7, 3, 14, .70)), url('/assets/background-app.png');
+  background-image: linear-gradient(rgba(7, 3, 14, .44), rgba(7, 3, 14, .70)), url('/assets/halloween-background.webp');
   background-position: center 38%;
   background-size: cover;
   background-repeat: no-repeat;
@@ -1341,7 +1341,7 @@ html[data-season-theme="halloween"] .hero-copy h1 em { color:#ffe1c1; text-shado
 /* ===== LNZ Halloween completo ===== */
 html[data-season-theme="halloween"] { --accent:#ff7518; --accent-2:#a44bff; --line:rgba(255,117,24,.22); --line-strong:rgba(255,117,24,.46); }
 html[data-season-theme="halloween"] body { background:#050208; }
-html[data-season-theme="halloween"] .background-art { position:fixed; inset:0; background:linear-gradient(90deg,rgba(2,1,4,.91),rgba(16,4,20,.76) 48%,rgba(2,1,3,.90)),radial-gradient(circle at 75% 24%,rgba(255,96,0,.22),transparent 34%),url('/assets/halloween-background.png') center/cover no-repeat; filter:saturate(1.08) contrast(1.08); opacity:1; }
+html[data-season-theme="halloween"] .background-art { position:fixed; inset:0; background:linear-gradient(90deg,rgba(2,1,4,.91),rgba(16,4,20,.76) 48%,rgba(2,1,3,.90)),radial-gradient(circle at 75% 24%,rgba(255,96,0,.22),transparent 34%),url('/assets/halloween-background.webp') center/cover no-repeat; filter:saturate(1.08) contrast(1.08); opacity:1; }
 html[data-season-theme="halloween"] .background-art::before { content:""; position:absolute; inset:0; background:radial-gradient(circle at 50% 115%,rgba(255,92,0,.18),transparent 32%),linear-gradient(to bottom,rgba(0,0,0,.18),rgba(0,0,0,.55)); pointer-events:none; }
 html[data-season-theme="halloween"] .background-art::after { opacity:.18; filter:saturate(1.25) contrast(1.12); }
 html[data-season-theme="halloween"] .glass-card,html[data-season-theme="halloween"] .entry-card,html[data-season-theme="halloween"] .prejoin-card,html[data-season-theme="halloween"] .modal-card,html[data-season-theme="halloween"] .room-sidebar,html[data-season-theme="halloween"] .room-topbar,html[data-season-theme="halloween"] .chat-panel,html[data-season-theme="halloween"] .audio-mixer-panel,html[data-season-theme="halloween"] .participant-menu,html[data-season-theme="halloween"] .camera-dock { background:linear-gradient(160deg,rgba(13,7,17,.92),rgba(5,4,8,.90)); border-color:rgba(255,117,24,.25); box-shadow:0 24px 70px rgba(0,0,0,.42),0 0 42px rgba(126,43,255,.07); backdrop-filter:blur(15px); }
@@ -1365,7 +1365,7 @@ html[data-season-theme="halloween"] .background-art {
   background:
     linear-gradient(90deg, rgba(2,1,4,.42) 0%, rgba(9,3,13,.18) 48%, rgba(2,1,4,.36) 100%),
     linear-gradient(to bottom, rgba(0,0,0,.04), rgba(0,0,0,.16)),
-    url('/assets/halloween-background.png') center center / cover no-repeat !important;
+    url('/assets/halloween-background.webp') center center / cover no-repeat !important;
   filter: saturate(1.08) contrast(1.03) brightness(1.05) !important;
   opacity: 1 !important;
 }
@@ -1406,7 +1406,7 @@ html[data-season-theme="halloween"] .background-art {
   background:
     linear-gradient(90deg, rgba(2,1,4,.38) 0%, rgba(8,3,12,.14) 48%, rgba(2,1,4,.34) 100%),
     linear-gradient(to bottom, rgba(0,0,0,.03), rgba(0,0,0,.15)),
-    url('/assets/halloween-background.png') center center / cover no-repeat fixed !important;
+    url('/assets/halloween-background.webp') center center / cover no-repeat fixed !important;
   filter: saturate(1.08) contrast(1.03) brightness(1.04) !important;
   opacity: 1 !important;
 }
@@ -1849,3 +1849,80 @@ html[data-season-theme="halloween"] .background-art {
     min-width: 138px !important;
   }
 }
+
+
+/* ============================================================
+   LNZ PRO LIGHT — interface profissional + leve
+   ============================================================ */
+:root{
+  --pro-bg:#07070a;--pro-panel:rgba(11,10,15,.84);--pro-panel-2:rgba(17,15,23,.78);
+  --pro-border:rgba(255,255,255,.09);--pro-muted:#9b98a8;--pro-text:#f7f7fa;
+  --pro-orange:#ff6a1f;--pro-purple:#8d4cff;--pro-green:#4fe3a4;
+  --pro-shadow:0 18px 60px rgba(0,0,0,.38);--pro-radius:18px;
+  font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{background:var(--pro-bg);color:var(--pro-text)}
+body{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+.noise{display:none!important}
+.background-art{background:url('/assets/halloween-background.webp') center/cover no-repeat fixed!important;filter:none!important;opacity:1!important}
+.background-art::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(4,4,7,.91) 0%,rgba(6,5,9,.72) 40%,rgba(6,4,10,.58) 67%,rgba(4,4,7,.82) 100%),linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.52))!important}
+.background-art::after{display:none!important}
+
+/* Halloween discreto: só três fantasmas e somente no início */
+body:not([data-view="landing"]) .seasonal-decor{display:none!important}
+body[data-view="landing"] .seasonal-decor{display:block!important;position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden}
+.seasonal-decor span{position:absolute;left:-70px;opacity:.11;filter:grayscale(.4) drop-shadow(0 8px 18px rgba(140,80,255,.18));animation:proGhost 26s linear infinite;will-change:transform;font-size:42px}
+.seasonal-decor span:nth-child(1){top:14%;animation-duration:28s}
+.seasonal-decor span:nth-child(2){top:54%;animation-duration:34s;animation-delay:-18s;font-size:54px;opacity:.08}
+.seasonal-decor span:nth-child(3){top:78%;animation-duration:39s;animation-delay:-27s;font-size:34px;opacity:.07}
+@keyframes proGhost{from{transform:translate3d(-10vw,0,0)}50%{transform:translate3d(55vw,-24px,0)}to{transform:translate3d(115vw,5px,0)}}
+@media(prefers-reduced-motion:reduce){.seasonal-decor span{animation:none!important}}
+
+/* ---------- LANDING ---------- */
+.landing-view{position:relative;z-index:2;min-height:100vh;padding:0 28px 42px}
+.landing-shell{width:min(1180px,100%);min-height:76vh;margin:0 auto;padding:68px 0 34px;display:grid;grid-template-columns:minmax(0,1.12fr) minmax(360px,.68fr);align-items:center;gap:70px}
+.hero-copy{max-width:680px}
+.mini-brand{display:inline-flex;align-items:center;gap:12px;margin-bottom:28px;padding:8px 12px 8px 8px;border:1px solid var(--pro-border);border-radius:14px;background:rgba(10,9,14,.55);backdrop-filter:blur(10px)}
+.mini-brand>img{width:34px;height:34px;border-radius:10px;object-fit:cover}
+.mini-brand>div{display:flex;flex-direction:column;gap:2px}.mini-brand strong{font-size:12px;letter-spacing:.12em}.mini-brand b{font-size:10px;font-weight:600;color:var(--pro-muted);letter-spacing:.02em}
+.hero-copy h1{font-size:clamp(48px,6vw,82px);line-height:.95;letter-spacing:-.06em;margin:0 0 24px;font-weight:850;max-width:760px}.hero-copy h1 em{font-style:normal;color:#e7d9ff}.hero-copy>p{max-width:620px;color:#b7b3c1;font-size:17px;line-height:1.65;margin:0 0 26px}
+.benefits{display:flex!important;flex-wrap:wrap;gap:9px!important;margin:0 0 30px!important}.benefits>div{width:auto!important;min-height:38px!important;padding:8px 12px!important;border:1px solid var(--pro-border)!important;background:rgba(11,10,15,.55)!important;border-radius:999px!important;color:#c8c4d0!important;font-size:12px!important}.benefits i{width:auto!important;height:auto!important;border:0!important;background:none!important;color:#d8c2ff!important}
+.hero-actions{display:flex!important;flex-wrap:wrap;gap:10px!important}.hero-actions .btn{min-height:46px;border-radius:12px;padding:0 17px;font-weight:750}.hero-main-btn{min-width:190px;background:linear-gradient(135deg,var(--pro-orange),var(--pro-purple))!important;border:0!important;box-shadow:0 13px 35px rgba(126,65,255,.22)}.hero-discord-btn{background:rgba(12,11,16,.62)!important;border-color:var(--pro-border)!important;color:#d9d6df!important}
+.entry-card{padding:27px!important;border-radius:22px!important;border:1px solid rgba(255,255,255,.10)!important;background:linear-gradient(165deg,rgba(14,12,19,.91),rgba(9,8,13,.84))!important;backdrop-filter:blur(18px)!important;box-shadow:var(--pro-shadow)!important}.entry-kicker{font-size:10px;font-weight:800;letter-spacing:.15em;color:#a98aff;margin-bottom:8px}.entry-card h2{margin:0 0 7px!important;font-size:25px!important;letter-spacing:-.025em}.entry-card>p{color:var(--pro-muted)!important;margin:0 0 24px!important;font-size:13px!important}
+.profile-row{gap:13px!important}.avatar-button{border:1px solid rgba(160,110,255,.28)!important;background:linear-gradient(135deg,rgba(111,61,245,.34),rgba(255,106,31,.16))!important;box-shadow:none!important}.field input,.join-code-row input,.field textarea{background:rgba(5,7,10,.78)!important;border:1px solid rgba(255,255,255,.10)!important;border-radius:12px!important;color:#fff!important;box-shadow:none!important}.field input:focus,.join-code-row input:focus,.field textarea:focus{border-color:rgba(141,76,255,.62)!important;box-shadow:0 0 0 3px rgba(141,76,255,.11)!important}
+.avatar-actions{gap:7px!important;margin-top:9px!important}.avatar-actions .btn{min-height:34px!important;padding:0 11px!important;border-radius:9px!important;font-size:11px!important}.gif-avatar-hint{color:#706d79!important}.entry-card .btn-primary{background:linear-gradient(135deg,var(--pro-orange),var(--pro-purple))!important;border:0!important;min-height:50px!important;border-radius:12px!important}.trust-line{margin:12px 0 3px;text-align:center;color:#76727e;font-size:10px}.trust-line span{color:var(--pro-green)}.trust-line b{font-weight:400;margin:0 5px;color:#4e4b55}.divider{margin:20px 0!important}.divider:before,.divider:after{background:rgba(255,255,255,.08)!important}.divider span{color:#6e6977!important}.join-code-row{grid-template-columns:1fr auto!important;gap:8px!important}.join-code-row .btn{min-width:92px!important;border-radius:11px!important}
+.public-section{position:relative;z-index:2;width:min(1180px,100%);margin:0 auto;padding:25px 0 36px;border-top:1px solid rgba(255,255,255,.07)}.section-heading span{color:#8c8796!important}.section-heading h3{font-size:21px!important}.public-grid{gap:12px!important}.public-card,.empty-public{border-radius:14px!important;border-color:var(--pro-border)!important;background:rgba(10,9,14,.64)!important;backdrop-filter:blur(10px)!important}
+footer{position:relative;z-index:2;color:#5f5b66!important}
+
+/* ---------- ROOM ---------- */
+.room-view{position:relative!important;z-index:4!important;min-height:100dvh!important;display:grid!important;grid-template-columns:228px minmax(0,1fr) 324px!important;grid-template-rows:64px minmax(0,1fr)!important;background:rgba(5,5,8,.52)!important;overflow:hidden}
+.room-topbar{grid-column:1/-1!important;grid-row:1!important;min-height:64px!important;padding:0 16px!important;background:rgba(8,8,12,.91)!important;border-bottom:1px solid var(--pro-border)!important;backdrop-filter:blur(15px)!important}.room-brand img{width:32px!important;height:32px!important;border-radius:9px}.room-brand strong{font-size:13px!important;letter-spacing:.08em}.code-pill{border-radius:9px!important;background:rgba(255,255,255,.045)!important;border:1px solid var(--pro-border)!important}.discord-channel-title{color:#8f8b98!important;font-size:12px!important}.access-pill{border-radius:999px!important}.connected{font-size:11px!important;color:#75dbb0!important}
+.room-sidebar{grid-column:1!important;grid-row:2!important;padding:14px!important;background:rgba(8,8,12,.88)!important;border-right:1px solid var(--pro-border)!important;backdrop-filter:blur(14px)!important;overflow-y:auto}.invite-card{padding:14px!important;border-radius:14px!important;background:rgba(255,255,255,.025)!important;border:1px solid var(--pro-border)!important}.invite-card>span,.discord-channel-section,.participants-heading{font-size:9px!important;letter-spacing:.12em!important;color:#777380!important}.invite-code-line strong{font-size:15px!important;letter-spacing:.1em!important}.invite-card .btn{min-height:38px!important;font-size:11px!important;border-radius:10px!important}.discord-channel-list{margin-top:20px!important}.discord-channel{min-height:38px!important;border-radius:9px!important;font-size:12px!important;color:#9d99a5!important}.discord-channel.active{background:rgba(255,255,255,.07)!important;color:#fff!important}.participants-list{gap:5px!important}.participant-row{border-radius:10px!important}.sidebar-me{background:rgba(4,4,7,.76)!important;border-top:1px solid var(--pro-border)!important}
+.room-stage{grid-column:2!important;grid-row:2!important;position:relative!important;min-width:0!important;min-height:calc(100dvh - 64px)!important;background:linear-gradient(rgba(7,7,10,.68),rgba(7,7,10,.78)),url('/assets/halloween-background.webp') center/cover no-repeat fixed!important;overflow:hidden}.empty-stage{height:100%!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;padding:40px 30px 110px!important}.screen-icon{width:62px!important;height:62px!important;border-radius:18px!important;background:rgba(141,76,255,.11)!important;border:1px solid rgba(141,76,255,.24)!important;color:#c9abff!important}.empty-stage h2{font-size:21px!important;margin-top:18px!important}.empty-stage p{font-size:12px!important;color:#898592!important}.stage-actions{gap:9px!important;margin-top:16px!important}.stage-actions .btn{min-height:44px!important;border-radius:11px!important}.video-stage{height:100%!important;padding-bottom:86px!important}.video-topline{height:48px!important;padding:0 14px!important;background:rgba(6,6,9,.70)!important;border-bottom:1px solid var(--pro-border)!important}.streams-grid{padding:12px!important;gap:12px!important}.stream-card{border-radius:16px!important;border:1px solid var(--pro-border)!important;background:#050507!important;box-shadow:0 12px 35px rgba(0,0,0,.28)!important}.stream-video{background:#020203!important}
+.chat-panel{grid-column:3!important;grid-row:2!important;position:relative!important;width:auto!important;min-width:0!important;background:rgba(8,8,12,.90)!important;border-left:1px solid var(--pro-border)!important;backdrop-filter:blur(14px)!important}.chat-head{min-height:58px!important;padding:12px 14px!important;border-bottom:1px solid var(--pro-border)!important}.chat-head span{font-size:8px!important;color:#777380!important}.chat-head strong{font-size:12px!important}.chat-messages{padding:13px!important}.chat-compose{margin:10px!important;padding:6px!important;border-radius:13px!important;background:rgba(3,4,6,.80)!important;border:1px solid var(--pro-border)!important}.chat-compose textarea{min-height:40px!important}.chat-send{width:39px!important;height:39px!important;border-radius:10px!important;background:linear-gradient(135deg,var(--pro-orange),var(--pro-purple))!important}.chat-hint{font-size:8px!important;color:#5d5964!important}
+.room-controls{position:absolute!important;z-index:25!important;left:50%!important;right:auto!important;bottom:14px!important;transform:translateX(-50%)!important;width:max-content!important;max-width:calc(100% - 24px)!important;min-height:58px!important;padding:7px!important;gap:6px!important;border:1px solid rgba(255,255,255,.10)!important;border-radius:16px!important;background:rgba(8,8,12,.92)!important;backdrop-filter:blur(16px)!important;box-shadow:0 20px 55px rgba(0,0,0,.48)!important;overflow-x:auto!important}.room-controls>span{display:none!important}.room-controls button{min-height:42px!important;padding:0 12px!important;border-radius:10px!important;font-size:10.5px!important;font-weight:750!important;white-space:nowrap!important;border-color:rgba(255,255,255,.08)!important;background:rgba(255,255,255,.035)!important;color:#d6d2dc!important}.room-controls #shareControl{background:linear-gradient(135deg,var(--pro-orange),var(--pro-purple))!important;color:white!important;border:0!important}.room-controls button.camera-on,.room-controls button.call-active,.room-controls button.mic-active{background:rgba(79,227,164,.10)!important;border-color:rgba(79,227,164,.20)!important;color:#9ef1c9!important}.room-controls #leaveControl{color:#ff8e8e!important}
+.audio-mixer-panel,.camera-dock{border-radius:16px!important;border:1px solid var(--pro-border)!important;background:rgba(9,9,13,.95)!important;backdrop-filter:blur(18px)!important;box-shadow:var(--pro-shadow)!important}.focus-exit-control{background:rgba(8,8,12,.92)!important;border:1px solid var(--pro-border)!important;border-radius:12px!important}
+
+/* ---------- MODALS ---------- */
+.modal-card{border-radius:20px!important;border:1px solid var(--pro-border)!important;background:rgba(10,9,14,.96)!important;box-shadow:0 24px 90px rgba(0,0,0,.58)!important;backdrop-filter:blur(20px)!important}.modal-head{border-bottom-color:rgba(255,255,255,.06)!important}.modal-close{border-radius:10px!important}.visibility-option,.feedback-type{border-radius:13px!important;background:rgba(255,255,255,.025)!important;border-color:var(--pro-border)!important}.visibility-option.active,.feedback-type.active{border-color:rgba(141,76,255,.46)!important;background:rgba(141,76,255,.08)!important}
+
+/* ---------- TABLET ---------- */
+@media(max-width:1080px){
+ .landing-shell{gap:34px;grid-template-columns:minmax(0,1fr) minmax(330px,.74fr)}
+ .hero-copy h1{font-size:clamp(44px,6vw,66px)}
+ .room-view{grid-template-columns:210px minmax(0,1fr)!important}.chat-panel{position:fixed!important;top:64px!important;right:0!important;bottom:0!important;width:min(92vw,360px)!important;transform:translateX(105%)!important;z-index:90!important;box-shadow:-22px 0 60px rgba(0,0,0,.45)!important}.chat-panel.open{transform:translateX(0)!important}.room-stage{grid-column:2!important}
+}
+
+/* ---------- MOBILE ---------- */
+@media(max-width:760px){
+ .background-art{background-image:url('/assets/halloween-background-mobile.webp')!important;background-attachment:scroll!important;background-position:center top!important}.background-art::before{background:linear-gradient(180deg,rgba(4,4,7,.72),rgba(4,4,7,.90))!important}
+ .landing-view{padding:0 16px 28px}.landing-shell{min-height:auto;padding:28px 0 20px;display:flex!important;flex-direction:column!important;gap:24px!important;align-items:stretch!important}.hero-copy{max-width:none}.mini-brand{margin-bottom:22px}.hero-copy h1{font-size:clamp(44px,13vw,62px);line-height:.93;margin-bottom:18px}.hero-copy>p{font-size:14px;line-height:1.58;margin-bottom:20px}.benefits{gap:7px!important;margin-bottom:22px!important}.benefits>div{font-size:10px!important;padding:7px 10px!important}.hero-actions{display:grid!important;grid-template-columns:1fr 1fr!important}.hero-actions .hero-main-btn{grid-column:1/-1!important}.hero-actions .btn{min-width:0!important;min-height:44px!important;font-size:11px!important}.entry-card{padding:20px!important;border-radius:18px!important}.entry-card h2{font-size:22px!important}.profile-row{align-items:center!important}.avatar-button{width:58px!important;height:58px!important;min-width:58px!important}.public-section{padding-top:18px}.public-grid{grid-template-columns:1fr!important}
+ .seasonal-decor span{font-size:28px!important;opacity:.06!important;animation-duration:40s!important}
+ .room-view{display:block!important;min-height:100dvh!important;overflow:hidden!important}.room-topbar{position:fixed!important;top:0!important;left:0!important;right:0!important;height:58px!important;min-height:58px!important;z-index:100!important;padding:0 10px!important}.mobile-menu-control{display:grid!important;width:38px!important;height:38px!important}.room-brand strong,.top-separator,.discord-channel-title,.room-status .top-discord-link,.room-status .people-chip{display:none!important}.room-brand img{width:30px!important;height:30px!important}.room-status{margin-left:auto!important}.room-status .connected{display:none!important}
+ .room-sidebar{position:fixed!important;z-index:120!important;top:58px!important;bottom:0!important;left:0!important;width:min(86vw,300px)!important;display:block!important;transform:translateX(-104%)!important;transition:transform .18s ease!important;background:rgba(8,8,12,.97)!important}.room-view.mobile-menu-open .room-sidebar{transform:translateX(0)!important}
+ .room-stage{position:absolute!important;inset:58px 0 0!important;min-height:0!important;width:100%!important;background:linear-gradient(rgba(7,7,10,.76),rgba(7,7,10,.84)),url('/assets/halloween-background-mobile.webp') center/cover no-repeat!important}.empty-stage{padding:26px 17px 108px!important}.empty-stage h2{text-align:center!important;font-size:19px!important}.empty-stage p{text-align:center!important;max-width:300px}.stage-actions{width:min(100%,320px)!important;display:grid!important;grid-template-columns:1fr!important}.stage-actions .btn{width:100%!important}.video-stage{padding-bottom:86px!important}.streams-grid{padding:7px!important;gap:7px!important}.stream-card{border-radius:11px!important}
+ .room-controls{position:fixed!important;left:8px!important;right:8px!important;bottom:max(8px,env(safe-area-inset-bottom))!important;transform:none!important;width:auto!important;max-width:none!important;min-height:64px!important;border-radius:15px!important;padding:7px!important;display:flex!important;overflow-x:auto!important;scroll-snap-type:x proximity!important}.room-controls button{flex:0 0 auto!important;min-width:104px!important;min-height:48px!important;padding:0 12px!important;font-size:11px!important;scroll-snap-align:start!important}.room-controls #shareControl{min-width:132px!important}.room-controls #fullscreenControl,.room-controls #leaveControl{min-width:48px!important;width:48px!important;padding:0!important}
+ .chat-panel{top:58px!important;width:100%!important;max-width:none!important;background:rgba(8,8,12,.98)!important}.audio-mixer-panel{left:8px!important;right:8px!important;bottom:84px!important;width:auto!important;max-height:65dvh!important;padding:16px!important}.mixer-range-row input[type="range"]{height:44px!important}.camera-dock{left:8px!important;right:8px!important;bottom:84px!important;max-height:45dvh!important}.camera-grid{grid-template-columns:1fr 1fr!important;gap:7px!important}.camera-card{border-radius:12px!important}.focus-exit-control{top:10px!important;right:10px!important;min-height:42px!important}
+}
+@media(max-width:430px){.camera-grid{grid-template-columns:1fr!important}.hero-actions{grid-template-columns:1fr!important}.hero-actions .hero-main-btn{grid-column:auto!important}}
