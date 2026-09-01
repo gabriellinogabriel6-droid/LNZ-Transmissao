@@ -1,19 +1,51 @@
 {
-  "name": "lnz-transmissao",
-  "version": "1.2.0",
-  "private": true,
-  "description": "Site de compartilhamento de tela em tempo real com WebRTC e Socket.IO.",
-  "main": "server.js",
+  "name": "lnz-desktop",
+  "version": "0.1.0",
+  "description": "Transmissor desktop LNZ com captura de audio por processo",
+  "main": "main.js",
+  "author": "LNZ",
+  "license": "UNLICENSED",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
-  },
-  "engines": {
-    "node": ">=20"
+    "start": "electron .",
+    "rebuild": "electron-rebuild -f -w electron-native-screenshare",
+    "dist": "electron-builder --win nsis portable"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "socket.io": "^4.8.1",
-    "pg": "^8.13.1"
+    "electron-native-screenshare": "^1.1.2",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.2",
+    "electron": "43.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.lnz.transmissao.desktop",
+    "productName": "LNZ Desktop",
+    "asar": true,
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "renderer.js",
+      "style.css",
+      "assets/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LNZ Desktop"
+    },
+    "directories": {
+      "output": "dist"
+    }
   }
 }
