@@ -720,3 +720,41 @@ body.auth-required #authModal .modal-backdrop { cursor: default; }
 .public-feedback-item small { color: #6f647e; font-size: 8px; text-transform: capitalize; }
 .public-feedback-empty { padding: 24px; text-align: center; color: #81758f; font-size: 11px; }
 .public-feedback-card > .btn { margin-top: 14px; }
+
+/* Recuperação de conta */
+.auth-tabs { grid-template-columns: repeat(3, 1fr); }
+.auth-link-btn {
+  display: block;
+  margin: 10px auto 0;
+  border: 0;
+  background: transparent;
+  color: #b99cff;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 5px 8px;
+}
+.auth-link-btn:hover { color: #efe6ff; text-decoration: underline; }
+.auth-logged-in #regenerateRecoveryCode { margin-bottom: 9px; }
+.recovery-code-card { width: min(500px, 100%); }
+.recovery-code-card > p { color: #9e91af; font-size: 12px; line-height: 1.6; margin: -4px 0 18px; }
+.recovery-code-value {
+  padding: 16px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(174, 126, 255, .52);
+  background: rgba(127, 78, 255, .10);
+  color: #f5edff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: clamp(14px, 4vw, 19px);
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-align: center;
+  word-break: break-all;
+  user-select: all;
+}
+.recovery-code-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
+.recovery-code-card > small { display: block; color: #7e718f; font-size: 9px; line-height: 1.5; margin-top: 12px; text-align: center; }
+@media (max-width: 520px) {
+  .auth-tabs { grid-template-columns: 1fr; }
+  .recovery-code-actions { grid-template-columns: 1fr; }
+}

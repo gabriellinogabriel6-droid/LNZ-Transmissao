@@ -32,3 +32,9 @@ NOVIDADES:
 - Aviso de atualização/queda.
 - Várias pessoas podem transmitir a tela ao mesmo tempo.
 - Cada transmissão aparece separada e tem controle de som para quem assiste.
+
+RECUPERACAO DE CONTA
+- A nova versao adiciona codigo de recuperacao para troca de senha.
+- Nao precisa criar tabela manualmente: o servidor atualiza a tabela users sozinho.
+- Confirme que DATABASE_URL esta configurado no Render.
+- Depois do deploy, usuarios antigos devem entrar na conta e clicar em "Gerar novo codigo de recuperacao" uma vez.

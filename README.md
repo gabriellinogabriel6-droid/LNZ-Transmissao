@@ -135,3 +135,20 @@ O servidor cria automaticamente as tabelas `users`, `sessions` e `feedbacks`. Se
 - Cada tela aparece em um card separado na grade de transmissões.
 - Cada espectador pode ligar/desligar o som de cada transmissão e usar o Mix de volume.
 - O limite real depende da internet, CPU/memória dos dispositivos, navegador e TURN/WebRTC; portanto não existe garantia prática de quantidade infinita.
+
+## Login persistente + recuperação de senha
+
+Esta versão mantém o login obrigatório e adiciona recuperação de conta.
+
+- O **nome de usuário é único** (`username_key` no PostgreSQL), então duas pessoas não podem usar o mesmo login, mesmo mudando maiúsculas/minúsculas.
+- A senha é armazenada somente como **hash scrypt com salt**. A senha original nunca é gravada no banco.
+- A sessão fica em cookie `HttpOnly` por até 30 dias.
+- Ao criar uma conta, o site gera um **código de recuperação** no formato `LNZ-XXXX-XXXX-XXXX-XXXX-XXXX`.
+- O código de recuperação também não é salvo em texto no banco: apenas o hash dele é armazenado.
+- Em **Recuperar**, o usuário informa login + código de recuperação + nova senha.
+- Depois de uma recuperação bem-sucedida, sessões antigas são encerradas e um **novo código de recuperação** é gerado.
+- Usuários antigos, criados antes desta atualização, podem entrar normalmente e clicar em **Gerar novo código de recuperação** na conta.
+
+### PostgreSQL obrigatório no Render
+
+Para contas, senhas, perfis, amigos e códigos de recuperação continuarem existindo depois de reiniciar o serviço, configure `DATABASE_URL` no Render com seu PostgreSQL. A atualização cria automaticamente as novas colunas `recovery_code_hash` e `recovery_code_created_at`.

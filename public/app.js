@@ -71,14 +71,23 @@ function applyDiscordLinks() {
 
 
 function setAuthMode(mode) {
-  state.authMode = mode === 'register' ? 'register' : 'login';
+  state.authMode = ['register', 'recover'].includes(mode) ? mode : 'login';
   const register = state.authMode === 'register';
-  $('authLoginTab')?.classList.toggle('active', !register);
+  const recover = state.authMode === 'recover';
+  $('authLoginTab')?.classList.toggle('active', state.authMode === 'login');
   $('authRegisterTab')?.classList.toggle('active', register);
-  $('authConfirmWrap')?.classList.toggle('hidden', !register);
-  if ($('authTitle')) $('authTitle').textContent = register ? 'Criar sua conta' : 'Entrar na sua conta';
-  if ($('authSubmit')) $('authSubmit').textContent = register ? 'Criar conta' : 'Entrar';
-  if ($('authPassword')) $('authPassword').autocomplete = register ? 'new-password' : 'current-password';
+  $('authRecoverTab')?.classList.toggle('active', recover);
+  $('authConfirmWrap')?.classList.toggle('hidden', !(register || recover));
+  $('authRecoveryCodeWrap')?.classList.toggle('hidden', !recover);
+  $('forgotPasswordButton')?.classList.toggle('hidden', recover);
+  if ($('authTitle')) $('authTitle').textContent = register ? 'Criar sua conta' : (recover ? 'Recuperar sua conta' : 'Entrar na sua conta');
+  if ($('authSubmit')) $('authSubmit').textContent = register ? 'Criar conta' : (recover ? 'Trocar senha e entrar' : 'Entrar');
+  if ($('authPasswordLabel')) $('authPasswordLabel').textContent = recover ? 'NOVA SENHA' : 'SENHA';
+  if ($('authPassword')) {
+    $('authPassword').autocomplete = register || recover ? 'new-password' : 'current-password';
+    $('authPassword').placeholder = recover ? 'Digite sua nova senha' : 'Sua senha';
+  }
+  if ($('authPasswordConfirm')) $('authPasswordConfirm').placeholder = recover ? 'Repita a nova senha' : 'Digite a senha novamente';
   $('authError')?.classList.add('hidden');
 }
 
@@ -159,26 +168,73 @@ async function loadAccount() {
   return state.account;
 }
 
+function showRecoveryCode(code) {
+  if (!code) return;
+  const value = $('recoveryCodeValue');
+  if (value) value.textContent = code;
+  $('recoveryCodeModal')?.classList.remove('hidden');
+  $('recoveryCodeModal')?.setAttribute('aria-hidden', 'false');
+}
+
+function closeRecoveryCodeModal() {
+  $('recoveryCodeModal')?.classList.add('hidden');
+  $('recoveryCodeModal')?.setAttribute('aria-hidden', 'true');
+}
+
+async function copyRecoveryCodeValue() {
+  const code = $('recoveryCodeValue')?.textContent?.trim() || '';
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code);
+    showToast('Código de recuperação copiado.');
+  } catch {
+    showToast('Não foi possível copiar automaticamente.');
+  }
+}
+
+async function regenerateRecoveryCode() {
+  const button = $('regenerateRecoveryCode');
+  if (button) { button.disabled = true; button.textContent = 'Gerando...'; }
+  try {
+    const response = await fetch('/api/auth/recovery-code/regenerate', { method: 'POST', credentials: 'same-origin' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível gerar o código.');
+    showRecoveryCode(data.recoveryCode);
+  } catch (error) {
+    showToast(error?.message || 'Não foi possível gerar o código.');
+  } finally {
+    if (button) { button.disabled = false; button.textContent = '🔑 Gerar novo código de recuperação'; }
+  }
+}
+
 async function submitAuth() {
   const username = $('authUsername')?.value.trim() || '';
   const password = $('authPassword')?.value || '';
   const confirm = $('authPasswordConfirm')?.value || '';
+  const recoveryCode = $('authRecoveryCode')?.value.trim() || '';
   const error = $('authError');
   if (error) error.classList.add('hidden');
 
-  if (state.authMode === 'register' && password !== confirm) {
+  if ((state.authMode === 'register' || state.authMode === 'recover') && password !== confirm) {
     if (error) { error.textContent = 'As duas senhas precisam ser iguais.'; error.classList.remove('hidden'); }
+    return;
+  }
+  if (state.authMode === 'recover' && !recoveryCode) {
+    if (error) { error.textContent = 'Digite seu código de recuperação.'; error.classList.remove('hidden'); }
     return;
   }
 
   const button = $('authSubmit');
-  if (button) { button.disabled = true; button.textContent = state.authMode === 'register' ? 'Criando...' : 'Entrando...'; }
+  const loadingText = state.authMode === 'register' ? 'Criando...' : (state.authMode === 'recover' ? 'Recuperando...' : 'Entrando...');
+  if (button) { button.disabled = true; button.textContent = loadingText; }
   try {
-    const response = await fetch(`/api/auth/${state.authMode === 'register' ? 'register' : 'login'}`, {
+    const endpoint = state.authMode === 'register' ? 'register' : (state.authMode === 'recover' ? 'recover' : 'login');
+    const body = state.authMode === 'recover' ? { username, recoveryCode, password } : { username, password };
+    const response = await fetch(`/api/auth/${endpoint}`, {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify(body)
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data?.ok) throw new Error(data?.error || 'Não foi possível entrar.');
@@ -188,13 +244,21 @@ async function submitAuth() {
     updateAccountUI();
     await reconnectSocketAfterAuth();
     closeAuthModal();
-    showToast(state.authMode === 'register' ? 'Conta criada e conectada.' : 'Login realizado.');
+    if (data.recoveryCode) showRecoveryCode(data.recoveryCode);
+    showToast(state.authMode === 'register' ? 'Conta criada e conectada.' : (state.authMode === 'recover' ? 'Senha alterada. Você já está conectado.' : 'Login realizado.'));
+    setAuthMode('login');
+    if ($('authPassword')) $('authPassword').value = '';
+    if ($('authPasswordConfirm')) $('authPasswordConfirm').value = '';
+    if ($('authRecoveryCode')) $('authRecoveryCode').value = '';
     await loadPublicRooms();
     await routeFromLocation();
   } catch (err) {
     if (error) { error.textContent = err?.message || 'Não foi possível entrar.'; error.classList.remove('hidden'); }
   } finally {
-    if (button) { button.disabled = false; button.textContent = state.authMode === 'register' ? 'Criar conta' : 'Entrar'; }
+    if (button) {
+      button.disabled = false;
+      button.textContent = state.authMode === 'register' ? 'Criar conta' : (state.authMode === 'recover' ? 'Trocar senha e entrar' : 'Entrar');
+    }
   }
 }
 
@@ -245,9 +309,15 @@ $('accountLogoutQuick')?.addEventListener('click', logoutAccount);
 $('authLogout')?.addEventListener('click', logoutAccount);
 $('authLoginTab')?.addEventListener('click', () => setAuthMode('login'));
 $('authRegisterTab')?.addEventListener('click', () => setAuthMode('register'));
+$('authRecoverTab')?.addEventListener('click', () => setAuthMode('recover'));
+$('forgotPasswordButton')?.addEventListener('click', () => setAuthMode('recover'));
+$('regenerateRecoveryCode')?.addEventListener('click', regenerateRecoveryCode);
+$('copyRecoveryCode')?.addEventListener('click', copyRecoveryCodeValue);
+$('closeRecoveryCode')?.addEventListener('click', closeRecoveryCodeModal);
 $('authSubmit')?.addEventListener('click', submitAuth);
 $('authPassword')?.addEventListener('keydown', (event) => { if (event.key === 'Enter' && state.authMode === 'login') submitAuth(); });
 $('authPasswordConfirm')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') submitAuth(); });
+$('authRecoveryCode')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') submitAuth(); });
 $('closeAuth')?.addEventListener('click', closeAuthModal);
 $('authModal')?.addEventListener('click', (event) => { if (event.target.dataset.closeAuth) closeAuthModal(); });
 $('reloadSite')?.addEventListener('click', () => location.reload());
