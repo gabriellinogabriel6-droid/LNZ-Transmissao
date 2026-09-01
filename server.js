@@ -1214,6 +1214,18 @@ function removeSocketFromRoom(socket, reason = 'left') {
   broadcastPublicRooms();
 }
 
+function nicknameIsActive(nickname, exceptSocketId = '') {
+  const key = String(nickname || '').trim().toLocaleLowerCase('pt-BR');
+  if (!key) return false;
+  for (const room of rooms.values()) {
+    for (const [socketId, participant] of room.participants.entries()) {
+      if (socketId === exceptSocketId) continue;
+      if (String(participant.nickname || '').trim().toLocaleLowerCase('pt-BR') === key) return true;
+    }
+  }
+  return false;
+}
+
 io.on('connection', async (socket) => {
   try { socket.data.account = await currentUserFromRequest(socket.request); } catch { socket.data.account = null; }
   socket.emit('public-rooms-updated', publicRooms());
@@ -1241,13 +1253,12 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('create-room', ({ nickname, avatar, avatarScale, avatarOffsetX, avatarOffsetY, visibility, password }, callback = () => {}) => {
-    const account = socket.data.account;
-    if (!account) return callback({ ok: false, error: 'Faça login para criar uma sala.' });
-    const cleanName = cleanNickname(account.username);
+    const cleanName = cleanNickname(nickname);
     const mode = visibility === 'private' ? 'private' : 'public';
     const pass = String(password || '');
 
-    if (!cleanName) return callback({ ok: false, error: 'Digite seu nickname.' });
+    if (!cleanName) return callback({ ok: false, error: 'Escolha seu user.' });
+    if (nicknameIsActive(cleanName, socket.id)) return callback({ ok: false, error: 'Esse user já está sendo usado. Escolha outro nome.' });
     if (mode === 'private' && pass.length < 4) {
       return callback({ ok: false, error: 'A senha da sala privada precisa ter pelo menos 4 caracteres.' });
     }
@@ -1269,12 +1280,12 @@ io.on('connection', async (socket) => {
     };
 
     room.participants.set(socket.id, {
-      userId: account.id,
+      userId: null,
       nickname: cleanName,
-      avatar: cleanAvatar(avatar) || cleanAvatar(account.avatar),
-      avatarScale: cleanAvatarScale(avatarScale ?? account.avatarScale),
-      avatarOffsetX: cleanAvatarOffsetX(avatarOffsetX ?? account.avatarOffsetX),
-      avatarOffsetY: cleanAvatarOffsetY(avatarOffsetY ?? account.avatarOffsetY),
+      avatar: cleanAvatar(avatar),
+      avatarScale: cleanAvatarScale(avatarScale),
+      avatarOffsetX: cleanAvatarOffsetX(avatarOffsetX),
+      avatarOffsetY: cleanAvatarOffsetY(avatarOffsetY),
       inVoice: false,
       micMuted: false,
       speaking: false
@@ -1283,7 +1294,7 @@ io.on('connection', async (socket) => {
     rooms.set(code, room);
     socket.join(code);
     socket.data.roomCode = code;
-    logActivity({ userId: account.id, username: account.username, action: 'room.create', roomCode: code, details: { visibility: mode } }).catch(() => {});
+    logActivity({ userId: null, username: cleanName, action: 'room.create', roomCode: code, details: { visibility: mode } }).catch(() => {});
 
     callback({
       ok: true,
@@ -1299,10 +1310,8 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('join-room', ({ roomCode, nickname, avatar, avatarScale, avatarOffsetX, avatarOffsetY, password }, callback = () => {}) => {
-    const account = socket.data.account;
-    if (!account) return callback({ ok: false, error: 'Faça login para entrar em uma sala.' });
     const code = normalizeCode(compactCode(roomCode));
-    const cleanName = cleanNickname(account.username);
+    const cleanName = cleanNickname(nickname);
     const room = rooms.get(code);
 
     if (!room) return callback({ ok: false, error: 'Sala não encontrada ou encerrada.' });
@@ -1311,25 +1320,24 @@ io.on('connection', async (socket) => {
     if (room.visibility === 'private' && !verifyPassword(password, room.passwordHash)) {
       return callback({ ok: false, error: 'Senha da sala incorreta.' });
     }
-    const duplicateAccount = [...room.participants.values()].some((person) => person.userId === account.id);
-    if (duplicateAccount) return callback({ ok: false, error: 'Sua conta já está conectada nessa sala.' });
+    if (nicknameIsActive(cleanName, socket.id)) return callback({ ok: false, error: 'Esse user já está sendo usado. Escolha outro nome.' });
 
     removeSocketFromRoom(socket);
 
     room.participants.set(socket.id, {
-      userId: account.id,
+      userId: null,
       nickname: cleanName,
-      avatar: cleanAvatar(avatar) || cleanAvatar(account.avatar),
-      avatarScale: cleanAvatarScale(avatarScale ?? account.avatarScale),
-      avatarOffsetX: cleanAvatarOffsetX(avatarOffsetX ?? account.avatarOffsetX),
-      avatarOffsetY: cleanAvatarOffsetY(avatarOffsetY ?? account.avatarOffsetY),
+      avatar: cleanAvatar(avatar),
+      avatarScale: cleanAvatarScale(avatarScale),
+      avatarOffsetX: cleanAvatarOffsetX(avatarOffsetX),
+      avatarOffsetY: cleanAvatarOffsetY(avatarOffsetY),
       inVoice: false,
       micMuted: false,
       speaking: false
     });
     socket.join(code);
     socket.data.roomCode = code;
-    logActivity({ userId: account.id, username: account.username, action: 'room.join', roomCode: code, details: { visibility: room.visibility } }).catch(() => {});
+    logActivity({ userId: null, username: cleanName, action: 'room.join', roomCode: code, details: { visibility: room.visibility } }).catch(() => {});
 
     callback({
       ok: true,

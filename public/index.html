@@ -15,7 +15,7 @@
 <body>
   <div class="background-art"></div>
   <div class="noise"></div>
-  <div id="seasonalDecor" class="seasonal-decor" aria-hidden="true"><span>🦇</span><span>🦇</span><span>🦇</span><span>☾</span></div>
+  <div id="seasonalDecor" class="seasonal-decor" aria-hidden="true"><span>👻</span><span>👻</span><span>👻</span><span>👻</span><span>👻</span><span>👻</span><span>👻</span><span>👻</span><span class="halloween-moon">☾</span></div>
 
   <div id="updateBanner" class="update-banner hidden" role="status">
     <div>
@@ -69,11 +69,6 @@
           <button id="removeAvatarLanding" class="btn btn-outline small-btn" type="button">Remover foto</button>
         </div>
         <small class="gif-avatar-hint">Foto ou GIF animado de até 10 MB funciona no perfil.</small>
-        <button id="accountButton" class="btn btn-outline btn-wide account-entry-btn" type="button">👤 Entrar / Criar conta</button>
-        <div id="accountSignedIn" class="account-signed-in hidden">
-          <span>Conectado como <b id="accountUsernameLabel">—</b></span>
-          <button id="accountLogoutQuick" type="button">Sair</button>
-        </div>
         <button id="openCreateRoom" class="btn btn-primary btn-wide">＋ Criar sala</button>
 
         <div class="divider"><span>OU</span></div>
@@ -215,6 +210,7 @@
         <button id="voiceCallControl" class="control-voice" type="button" title="Entrar na call de voz">📞 Entrar na call</button>
         <button id="micControl" class="control-voice mic-control" type="button" title="Ligar/desligar microfone" disabled>🎙 Mic ON</button>
         <button id="cameraControl" class="control-voice camera-control" type="button" title="Ligar/desligar câmera" disabled>📹 Câmera OFF</button>
+        <button id="cameraFlipControl" class="control-voice camera-flip-control" type="button" title="Trocar câmera frontal/traseira" disabled>🔄 Virar câmera</button>
         <span></span>
         <button id="audioControl" class="control-audio" type="button" title="Ativar áudio da aba na próxima transmissão">🔇 Áudio OFF</button>
         <button id="mixerControl" class="control-audio mixer-open-btn" type="button" title="Mix de volume">🎚 Mix</button>
@@ -696,6 +692,7 @@
 
   <div id="toast" class="toast" role="status"></div>
 
+  <audio id="halloweenLaugh" preload="auto" src="/assets/clown-laugh.wav"></audio>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/config.js"></script>
   <script src="/app.js"></script>

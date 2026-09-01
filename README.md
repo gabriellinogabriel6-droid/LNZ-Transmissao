@@ -302,3 +302,14 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - **Halloween**: preto, roxo e laranja com animações sutis de morcegos e lua.
 - A escolha fica salva no navegador.
 - O tema respeita `prefers-reduced-motion` para reduzir animações quando o dispositivo solicitar.
+
+
+## Halloween completo / modo simples
+- Entrada somente com user/nickname, sem senha de conta.
+- O mesmo user não pode ficar ativo em duas conexões ao mesmo tempo.
+- Tema Halloween no site inteiro, com fantasmas voando sem bloquear cliques.
+- Risada macabra original em public/assets/clown-laugh.wav.
+- Se o navegador bloquear autoplay, a risada toca no primeiro toque/clique.
+- Câmera ON/OFF e troca frontal/traseira quando o aparelho permitir.
+- Mix de volume adaptado para toque no celular.
+- O fundo do Halloween fica em public/assets/halloween-background.png.

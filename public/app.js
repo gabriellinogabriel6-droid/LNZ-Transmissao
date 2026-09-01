@@ -30,8 +30,8 @@ const state = {
   activeProfile: null,
   activeProfileRelation: 'none',
   themeColor: localStorage.getItem('lnz_theme_color') || '#7a3cff',
-  seasonTheme: localStorage.getItem('lnz_season_theme') || 'default',
-  pendingSeasonTheme: localStorage.getItem('lnz_season_theme') || 'default',
+  seasonTheme: localStorage.getItem('lnz_season_theme_v2') || 'halloween',
+  pendingSeasonTheme: localStorage.getItem('lnz_season_theme_v2') || 'halloween',
   authMode: 'login',
   authRequired: false,
   suppressDisconnectBanner: false,
@@ -57,6 +57,7 @@ const state = {
   voicePeerMuted: new Set(),
   cameraOn: false,
   cameraTrack: null,
+  cameraFacingMode: localStorage.getItem('lnz_camera_facing') || 'user',
   cameraHiddenPeers: new Set(),
   cameraDockMinimized: false,
   participantMenuTarget: null,
@@ -164,8 +165,8 @@ function updateAccountUI() {
     updateAvatarUI();
     renderEditProfileAvatar();
   } else {
-    if ($('landingNickname')) $('landingNickname').readOnly = true;
-    if ($('prejoinNickname')) $('prejoinNickname').readOnly = true;
+    if ($('landingNickname')) $('landingNickname').readOnly = false;
+    if ($('prejoinNickname')) $('prejoinNickname').readOnly = false;
     document.querySelectorAll('.social-account-action').forEach((el) => el.classList.add('hidden'));
   }
 }
@@ -203,16 +204,9 @@ async function reconnectSocketAfterAuth() {
 }
 
 async function loadAccount() {
-  try {
-    const response = await fetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store' });
-    const data = await response.json();
-    state.account = data?.user || null;
-  } catch {
-    state.account = null;
-  }
+  state.account = null;
   updateAccountUI();
-  if (!state.account) openAuthModal(true);
-  return state.account;
+  return null;
 }
 
 function showRecoveryCode(code) {
@@ -394,10 +388,7 @@ async function logoutAccount() {
 }
 
 function ensureLoggedIn() {
-  if (state.account) return true;
-  openAuthModal(true);
-  showToast('Faça login para continuar.');
-  return false;
+  return true;
 }
 
 
@@ -765,12 +756,12 @@ function openThemeModal() {
 function closeThemeModal() {
   $('themeModal')?.classList.add('hidden');
   $('themeModal')?.setAttribute('aria-hidden', 'true');
-  applySeasonTheme(state.seasonTheme || 'default');
+  applySeasonTheme(state.seasonTheme || 'halloween');
 }
 
 function saveThemeColor() {
   state.seasonTheme = state.pendingSeasonTheme === 'halloween' ? 'halloween' : 'default';
-  localStorage.setItem('lnz_season_theme', state.seasonTheme);
+  localStorage.setItem('lnz_season_theme_v2', state.seasonTheme);
   applySeasonTheme(state.seasonTheme);
   $('themeModal')?.classList.add('hidden');
   $('themeModal')?.setAttribute('aria-hidden', 'true');
@@ -1239,8 +1230,8 @@ $('prejoinNickname').addEventListener('input', () => {
 });
 
 function openCreateModal() {
-  if (!ensureLoggedIn()) return;
-  const nickname = state.account.username;
+  const nickname = $('landingNickname')?.value.trim() || state.nickname || '';
+  if (!nickname) return showToast('Escolha seu user primeiro.');
   state.selectedVisibility = 'public';
   updateVisibilityModal();
   $('createModal').classList.remove('hidden');
@@ -1279,8 +1270,7 @@ document.querySelectorAll('.visibility-option').forEach((button) => {
 });
 
 $('createRoomConfirm').addEventListener('click', async () => {
-  if (!ensureLoggedIn()) return;
-  const nickname = state.account.username;
+  const nickname = $('landingNickname')?.value.trim() || state.nickname || '';
   const password = $('createPassword').value;
   if (!nickname) return showToast('Digite seu nickname.');
   if (state.selectedVisibility === 'private' && password.length < 4) {
@@ -1308,7 +1298,6 @@ $('createRoomConfirm').addEventListener('click', async () => {
 });
 
 async function openPrejoin(code) {
-  if (!ensureLoggedIn()) return;
   const clean = normalizeCode(code);
   if (clean.length !== 9) return showToast('Digite um código válido.');
 
@@ -1331,14 +1320,15 @@ async function openPrejoin(code) {
   $('enterRoom').textContent = roomOpen ? 'Entrar na sala →' : 'Sala fechada';
   $('passwordField').classList.toggle('hidden', !info.requiresPassword);
   $('roomPassword').value = '';
-  $('prejoinNickname').value = state.account?.username || state.nickname;
+  $('prejoinNickname').value = $('landingNickname')?.value || state.nickname || '';
   updateNicknamePreview();
   updateAvatarUI();
   setView('prejoin');
 }
 
 $('goToRoom').addEventListener('click', () => {
-  if (!ensureLoggedIn()) return;
+  const nickname = $('landingNickname')?.value.trim() || state.nickname || '';
+  if (!nickname) return showToast('Escolha seu user primeiro.');
   const code = normalizeCode($('roomCodeInput').value);
   if (code.length !== 9) return showToast('Digite o código completo da sala.');
   history.pushState({}, '', `/room/${code}`);
@@ -1352,10 +1342,10 @@ $('roomCodeInput').addEventListener('keydown', (event) => {
 });
 
 $('enterRoom').addEventListener('click', async () => {
-  if (!ensureLoggedIn()) return;
   if (!state.room) return;
   if (state.room.isOpen === false) return showToast('Essa sala está fechada pelo dono.');
-  const nickname = state.account.username;
+  const nickname = $('prejoinNickname')?.value.trim() || state.nickname || '';
+  if (!nickname) return showToast('Escolha seu user primeiro.');
 
   $('enterRoom').disabled = true;
   const result = await new Promise((resolve) => socket.emit('join-room', {
@@ -1717,7 +1707,6 @@ function renderRoom() {
     row.append(avatar, details, badges, more);
     row.classList.add('profile-clickable');
     row.title = `Abrir perfil de ${person.nickname}`;
-    row.addEventListener('click', () => openUserProfile(person.nickname));
     $('participantsList').appendChild(row);
   });
   renderCameraDock();
@@ -2177,6 +2166,11 @@ function updateVoiceControls() {
     camera.textContent = state.cameraOn ? '📹 Câmera ON' : '📹 Câmera OFF';
     camera.classList.toggle('camera-on', state.cameraOn);
   }
+  const flip = $('cameraFlipControl');
+  if (flip) {
+    flip.disabled = !state.voiceJoined;
+    flip.classList.toggle('camera-on', state.cameraOn);
+  }
 }
 
 async function renegotiateVoicePeer(peerId, retry = 0) {
@@ -2198,7 +2192,12 @@ async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) return showToast('Seu navegador não permite usar a câmera.');
   try {
     const cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } },
+      video: {
+        facingMode: { ideal: state.cameraFacingMode || 'user' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30, max: 30 }
+      },
       audio: false
     });
     const track = cameraStream.getVideoTracks()[0];
@@ -2246,6 +2245,51 @@ $('cameraControl')?.addEventListener('click', () => {
   if (state.cameraOn) stopCamera(true);
   else startCamera();
 });
+
+async function flipCamera() {
+  if (!state.voiceJoined) return;
+  const nextFacing = state.cameraFacingMode === 'environment' ? 'user' : 'environment';
+  state.cameraFacingMode = nextFacing;
+  localStorage.setItem('lnz_camera_facing', nextFacing);
+
+  if (!state.cameraOn || !state.cameraTrack) {
+    showToast(nextFacing === 'environment' ? 'Câmera traseira selecionada.' : 'Câmera frontal selecionada.');
+    return;
+  }
+
+  const oldTrack = state.cameraTrack;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: nextFacing },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30, max: 30 }
+      },
+      audio: false
+    });
+    const newTrack = stream.getVideoTracks()[0];
+    if (!newTrack) throw new Error('camera');
+    for (const pc of state.voicePeers.values()) {
+      const sender = pc.getSenders().find((item) => item.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(newTrack);
+    }
+    try { state.voiceStream?.removeTrack(oldTrack); } catch {}
+    try { oldTrack.stop(); } catch {}
+    state.cameraTrack = newTrack;
+    state.voiceStream?.addTrack(newTrack);
+    newTrack.addEventListener('ended', () => stopCamera(true), { once: true });
+    renderCameraDock();
+    updateVoiceControls();
+    showToast(nextFacing === 'environment' ? 'Usando câmera traseira.' : 'Usando câmera frontal.');
+  } catch (error) {
+    state.cameraFacingMode = nextFacing === 'environment' ? 'user' : 'environment';
+    localStorage.setItem('lnz_camera_facing', state.cameraFacingMode);
+    showToast('Não foi possível trocar a câmera neste aparelho.');
+  }
+}
+
+$('cameraFlipControl')?.addEventListener('click', flipCamera);
 
 async function joinVoiceCall() {
   if (!state.room || state.voiceJoined) return;
@@ -3191,13 +3235,12 @@ async function initApp() {
   applyDiscordLinks();
   applyIdentityToUI();
   updateVoiceControls();
+  applySeasonTheme(state.seasonTheme || 'halloween');
+  initHalloweenLaugh();
   await checkAppVersion();
   await loadAccount();
   await loadPublicRooms();
-  if (state.account) {
-    await loadFriends(false);
-    await routeFromLocation();
-  }
+  await routeFromLocation();
 }
 
 initApp();
@@ -3246,4 +3289,32 @@ $('channelCall')?.addEventListener('click', () => {
 
 
 // Tema visual sazonal
-applySeasonTheme(state.seasonTheme || 'default');
+applySeasonTheme(state.seasonTheme || 'halloween');
+
+// Risada macabra original. Se o autoplay com som for bloqueado, toca no primeiro clique/toque.
+function initHalloweenLaugh() {
+  const audio = $('halloweenLaugh');
+  if (!audio) return;
+  let played = sessionStorage.getItem('lnz_halloween_laugh_played') === '1';
+  const cleanup = () => {
+    window.removeEventListener('pointerdown', onFirstInteraction, true);
+    window.removeEventListener('keydown', onFirstInteraction, true);
+  };
+  const playOnce = async () => {
+    if (played || state.seasonTheme !== 'halloween') return;
+    try {
+      audio.volume = 0.42;
+      audio.currentTime = 0;
+      await audio.play();
+      played = true;
+      sessionStorage.setItem('lnz_halloween_laugh_played', '1');
+      cleanup();
+    } catch {}
+  };
+  const onFirstInteraction = () => { playOnce(); };
+  playOnce();
+  if (!played) {
+    window.addEventListener('pointerdown', onFirstInteraction, true);
+    window.addEventListener('keydown', onFirstInteraction, true);
+  }
+}
