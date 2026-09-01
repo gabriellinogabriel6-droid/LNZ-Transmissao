@@ -975,6 +975,10 @@ function setView(view) {
   $('prejoinView').classList.toggle('hidden', view !== 'prejoin');
   $('roomView').classList.toggle('hidden', view !== 'room');
   document.body.dataset.view = view;
+  if (view !== 'room') {
+    $('roomView')?.classList.remove('focus-mode', 'mobile-menu-open');
+    $('focusExitControl')?.classList.add('hidden');
+  }
 }
 
 function saveIdentity(nickname) {
@@ -1929,6 +1933,37 @@ $('chatFileInput').addEventListener('change', (event) => {
 
 $('chatAttach').addEventListener('click', chooseChatFile);
 $('removeChatFile').addEventListener('click', clearSelectedChatFile);
+function setRoomFocus(enabled) {
+  const room = $('roomView');
+  if (!room) return;
+  room.classList.toggle('focus-mode', enabled);
+  $('focusExitControl')?.classList.toggle('hidden', !enabled);
+  $('focusControl')?.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  if (enabled) {
+    closeChat();
+    room.classList.remove('mobile-menu-open');
+  }
+}
+
+$('focusControl')?.addEventListener('click', () => {
+  setRoomFocus(!$('roomView')?.classList.contains('focus-mode'));
+});
+
+$('focusExitControl')?.addEventListener('click', () => setRoomFocus(false));
+
+$('mobileMenuControl')?.addEventListener('click', () => {
+  const room = $('roomView');
+  if (!room) return;
+  room.classList.toggle('mobile-menu-open');
+});
+
+document.addEventListener('click', (event) => {
+  const room = $('roomView');
+  if (!room?.classList.contains('mobile-menu-open')) return;
+  if (event.target.closest('.room-sidebar') || event.target.closest('#mobileMenuControl')) return;
+  room.classList.remove('mobile-menu-open');
+});
+
 $('chatControl').addEventListener('click', () => {
   if (isChatDrawerMode() && $('chatPanel').classList.contains('open')) closeChat();
   else openChat();
@@ -2163,13 +2198,16 @@ function updateVoiceControls() {
   mic.textContent = state.voiceServerMuted ? '🔒 Mic bloqueado' : (state.voiceMuted ? '🔇 Mic OFF' : '🎙 Mic ON');
   mic.classList.toggle('mic-muted', state.voiceMuted || state.voiceServerMuted);
   if (camera) {
-    camera.disabled = !state.voiceJoined;
+    camera.disabled = !state.room || !navigator.mediaDevices?.getUserMedia;
     camera.textContent = state.cameraOn ? '📹 Câmera ON' : '📹 Câmera OFF';
     camera.classList.toggle('camera-on', state.cameraOn);
+    camera.title = state.voiceJoined
+      ? 'Ligar/desligar câmera'
+      : 'Entrar na call e ligar a câmera';
   }
   const flip = $('cameraFlipControl');
   if (flip) {
-    flip.disabled = !state.voiceJoined;
+    flip.disabled = !state.room || !navigator.mediaDevices?.getUserMedia;
     flip.classList.toggle('camera-on', state.cameraOn);
   }
 }
@@ -2241,14 +2279,27 @@ function stopCamera(notifyServer = true) {
   renderCameraDock();
 }
 
-$('cameraControl')?.addEventListener('click', () => {
-  if (!state.voiceJoined) return;
-  if (state.cameraOn) stopCamera(true);
-  else startCamera();
+$('cameraControl')?.addEventListener('click', async () => {
+  if (!state.room) return;
+  if (state.cameraOn) {
+    stopCamera(true);
+    return;
+  }
+
+  // No celular, um toque em Câmera já entra na call e abre a câmera.
+  if (!state.voiceJoined) {
+    await joinVoiceCall();
+    if (!state.voiceJoined) return;
+  }
+  await startCamera();
 });
 
 async function flipCamera() {
-  if (!state.voiceJoined) return;
+  if (!state.room) return;
+  if (!state.voiceJoined) {
+    await joinVoiceCall();
+    if (!state.voiceJoined) return;
+  }
   const nextFacing = state.cameraFacingMode === 'environment' ? 'user' : 'environment';
   state.cameraFacingMode = nextFacing;
   localStorage.setItem('lnz_camera_facing', nextFacing);
@@ -2654,7 +2705,16 @@ function closeAllInboundPeers() {
 async function startSharing() {
   if (!state.room) return;
   if (state.isSharing) return stopSharing();
-  if (!navigator.mediaDevices?.getDisplayMedia) return showToast('Seu navegador não permite compartilhar tela.');
+
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    if (mobile && navigator.mediaDevices?.getUserMedia) {
+      showToast('Este navegador não libera a captura da tela. Você ainda pode usar a câmera pelo botão 📹 Câmera.');
+    } else {
+      showToast('Seu navegador não permite compartilhar tela.');
+    }
+    return;
+  }
 
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({

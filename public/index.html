@@ -145,6 +145,7 @@
     </aside>
 
     <header class="room-topbar">
+      <button id="mobileMenuControl" class="mobile-menu-control" type="button" title="Abrir menu">☰</button>
       <div class="room-brand">
         <img src="/assets/logo.png" alt="LNZ" />
         <strong>LNZ</strong>
@@ -216,6 +217,7 @@
         <button id="mixerControl" class="control-audio mixer-open-btn" type="button" title="Mix de volume">🎚 Mix</button>
         <span></span>
         <button id="chatControl" class="control-chat" type="button" title="Abrir chat">💬 Chat <b id="chatUnread" class="chat-unread hidden">0</b></button>
+        <button id="focusControl" class="control-focus" type="button" title="Ocultar interface e focar na transmissão">👁 Ocultar</button>
         <span></span>
         <button id="fullscreenControl" class="control-icon" title="Tela cheia">⛶</button>
         <span></span>
@@ -263,6 +265,8 @@
 
       <div id="voiceAudioContainer" class="voice-audio-container" aria-hidden="true"></div>
     </section>
+
+    <button id="focusExitControl" class="focus-exit-control hidden" type="button">👁 Mostrar controles</button>
 
     <aside id="chatPanel" class="chat-panel">
       <div class="chat-head">

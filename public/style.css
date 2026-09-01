@@ -1542,3 +1542,310 @@ html[data-season-theme="halloween"] .background-art {
     grid-row: 4 !important;
   }
 }
+
+
+/* =========================================================
+   MOBILE PRO + MODO FOCO
+   ========================================================= */
+
+.mobile-menu-control {
+  display: none;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(8,5,12,.76);
+  color: #fff;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.control-focus {
+  min-height: 42px;
+  padding: 0 15px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,117,24,.28);
+  background: rgba(12,7,17,.82);
+  color: #f6efff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.focus-exit-control {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 500;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgba(255,117,24,.42);
+  border-radius: 13px;
+  background: rgba(7,4,11,.90);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 12px 35px rgba(0,0,0,.38);
+}
+
+/* Hide the application chrome, not the browser's own sharing banner. */
+.room-view.focus-mode {
+  display: block !important;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 300 !important;
+  background: #030205 !important;
+}
+.room-view.focus-mode .room-topbar,
+.room-view.focus-mode .room-sidebar,
+.room-view.focus-mode .chat-panel,
+.room-view.focus-mode .room-controls {
+  display: none !important;
+}
+.room-view.focus-mode .room-stage {
+  display: flex !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+  padding: 0 !important;
+  background: rgba(2,1,4,.28) !important;
+}
+.room-view.focus-mode .video-stage,
+.room-view.focus-mode .streams-grid {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+}
+.room-view.focus-mode .stream-card {
+  border-radius: 0 !important;
+  border: 0 !important;
+}
+.room-view.focus-mode .stream-video {
+  object-fit: contain !important;
+  max-height: 100vh !important;
+}
+
+/* Big touch targets and volume sliders */
+@media (max-width: 760px) {
+  .mobile-menu-control {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+  }
+
+  .room-topbar {
+    padding: 9px 10px !important;
+    gap: 8px !important;
+  }
+
+  .room-brand strong,
+  .top-separator,
+  .discord-channel-title {
+    display: none !important;
+  }
+
+  .room-brand {
+    min-width: 0 !important;
+    gap: 7px !important;
+  }
+
+  .room-brand img {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  .room-status {
+    gap: 5px !important;
+    margin-left: auto !important;
+  }
+
+  .room-status .top-discord-link,
+  .room-status .people-chip {
+    display: none !important;
+  }
+
+  /* Sidebar becomes a real mobile drawer */
+  .room-sidebar {
+    display: flex !important;
+    position: fixed !important;
+    z-index: 190 !important;
+    left: 0 !important;
+    top: 62px !important;
+    bottom: 0 !important;
+    width: min(86vw, 310px) !important;
+    max-height: none !important;
+    transform: translateX(-105%) !important;
+    transition: transform .22s ease !important;
+    box-shadow: 25px 0 70px rgba(0,0,0,.55) !important;
+    overflow-y: auto !important;
+  }
+
+  .room-view.mobile-menu-open .room-sidebar {
+    transform: translateX(0) !important;
+  }
+
+  .room-stage {
+    min-height: calc(100dvh - 62px) !important;
+    padding-bottom: 104px !important;
+  }
+
+  .empty-stage {
+    padding: 26px 16px 120px !important;
+  }
+
+  .empty-stage h2 {
+    font-size: clamp(20px, 6vw, 28px) !important;
+    text-align: center;
+  }
+
+  .stage-actions {
+    width: 100%;
+    max-width: 360px;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .stage-actions .btn {
+    min-height: 50px !important;
+    font-size: 15px !important;
+  }
+
+  /* Bottom mobile control dock */
+  .room-controls {
+    position: fixed !important;
+    z-index: 160 !important;
+    left: 8px !important;
+    right: 8px !important;
+    bottom: max(8px, env(safe-area-inset-bottom)) !important;
+    width: auto !important;
+    min-height: 72px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 9px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scroll-snap-type: x proximity;
+    border: 1px solid rgba(255,117,24,.20) !important;
+    border-radius: 18px !important;
+    background: rgba(7,4,11,.94) !important;
+    box-shadow: 0 18px 55px rgba(0,0,0,.58) !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .room-controls > span {
+    display: none !important;
+  }
+
+  .room-controls button {
+    flex: 0 0 auto !important;
+    min-width: 110px !important;
+    min-height: 50px !important;
+    padding: 0 14px !important;
+    border-radius: 13px !important;
+    font-size: 13px !important;
+    font-weight: 850 !important;
+    scroll-snap-align: start;
+    touch-action: manipulation;
+  }
+
+  #shareControl {
+    min-width: 142px !important;
+    background: linear-gradient(135deg, #ff671d, #8b38f6) !important;
+  }
+
+  #cameraControl {
+    min-width: 124px !important;
+  }
+
+  #cameraFlipControl {
+    min-width: 126px !important;
+  }
+
+  #mixerControl {
+    min-width: 100px !important;
+  }
+
+  #focusControl {
+    min-width: 112px !important;
+  }
+
+  #fullscreenControl,
+  #leaveControl {
+    min-width: 52px !important;
+    width: 52px !important;
+    padding: 0 !important;
+  }
+
+  /* Chat drawer */
+  .chat-panel {
+    top: 62px !important;
+    bottom: 0 !important;
+    width: min(94vw, 390px) !important;
+    z-index: 210 !important;
+  }
+
+  /* Audio mixer becomes a mobile bottom sheet */
+  .audio-mixer-panel {
+    position: fixed !important;
+    z-index: 230 !important;
+    left: 10px !important;
+    right: 10px !important;
+    bottom: calc(92px + env(safe-area-inset-bottom)) !important;
+    width: auto !important;
+    max-height: 64dvh !important;
+    overflow-y: auto !important;
+    border-radius: 18px !important;
+    padding: 17px !important;
+  }
+
+  .mixer-range-row {
+    gap: 12px !important;
+  }
+
+  .mixer-range-row input[type="range"] {
+    min-height: 42px !important;
+    width: 100% !important;
+    touch-action: pan-x;
+  }
+
+  .mixer-range-row span {
+    min-width: 52px !important;
+    font-size: 14px !important;
+    font-weight: 850 !important;
+  }
+
+  /* Camera tiles are comfortable on phones */
+  .camera-dock {
+    left: 8px !important;
+    right: 8px !important;
+    bottom: 92px !important;
+    max-height: 42dvh !important;
+  }
+
+  .camera-grid {
+    grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+  }
+
+  .camera-card video {
+    min-height: 120px !important;
+  }
+
+  .focus-exit-control {
+    top: max(10px, env(safe-area-inset-top)) !important;
+    right: 10px !important;
+    min-height: 46px !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .camera-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .room-controls button {
+    min-width: 106px !important;
+  }
+
+  #shareControl {
+    min-width: 138px !important;
+  }
+}

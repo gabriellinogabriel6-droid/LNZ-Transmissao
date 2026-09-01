@@ -335,3 +335,17 @@ O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do 
 - Fantasmas e lua animados aparecem somente na tela inicial.
 - Dentro da sala não aparecem fantasmas.
 - Funcionalidades de transmissão, chat, call, câmera e volume foram mantidas.
+
+
+## Mobile Pro
+
+- Modo foco/ocultar interface para deixar a transmissão ocupando a tela.
+- Botão para mostrar novamente os controles.
+- Menu lateral vira gaveta no celular.
+- Chat continua como gaveta no celular.
+- Barra de controles móvel, grande e rolável por toque.
+- Mixer de volume maior e apropriado para touch.
+- Botão da câmera pode entrar na call e ligar a câmera com um único toque.
+- Troca entre câmera frontal e traseira.
+- Compartilhamento de tela usa getDisplayMedia quando o navegador móvel oferece suporte.
+- Quando o navegador do celular não oferece captura de tela, o app orienta usar a câmera.
