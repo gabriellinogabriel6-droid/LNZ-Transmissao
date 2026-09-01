@@ -1223,3 +1223,9 @@ input:focus, textarea:focus { border-color: var(--accent) !important; box-shadow
 .remember-login-row span { display: grid; gap: 2px; }
 .remember-login-row strong { color: #f4edff; font-size: 12px; }
 .remember-login-row small { color: #8f84a4; font-size: 10px; line-height: 1.35; }
+
+/* Verificação de nome de usuário */
+.auth-username-status { display:block; margin-top:7px; font-size:10px; font-weight:700; }
+.auth-username-status.available { color:#64e6a1; }
+.auth-username-status.taken, .auth-username-status.invalid { color:#ff8798; }
+.auth-username-status.checking { color:#a99dbc; }

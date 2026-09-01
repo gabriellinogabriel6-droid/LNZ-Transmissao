@@ -199,8 +199,8 @@ async function loadAccount() {
     state.account = data?.user || null;
     if ($('authDatabaseStatus')) {
       $('authDatabaseStatus').textContent = data?.persistentDatabase
-        ? 'Conta salva com segurança no banco PostgreSQL.'
-        : 'Atenção: configure DATABASE_URL no Render para salvar contas permanentemente.';
+        ? 'Conta salva e nome de usuário exclusivo.'
+        : 'Nome de usuário exclusivo enquanto o servidor estiver online.';
     }
   } catch {
     state.account = null;
@@ -249,6 +249,56 @@ async function regenerateRecoveryCode() {
   }
 }
 
+let usernameCheckTimer = null;
+let lastUsernameAvailability = null;
+
+function setUsernameAvailability(message = '', type = '') {
+  const el = $('authUsernameStatus');
+  if (!el) return;
+  if (!message) {
+    el.textContent = '';
+    el.className = 'auth-username-status hidden';
+    return;
+  }
+  el.textContent = message;
+  el.className = `auth-username-status ${type}`;
+}
+
+async function checkUsernameAvailability() {
+  if (state.authMode !== 'register') {
+    lastUsernameAvailability = null;
+    setUsernameAvailability();
+    return;
+  }
+  const username = $('authUsername')?.value.trim() || '';
+  if (!/^[A-Za-z0-9_.-]{3,24}$/.test(username)) {
+    lastUsernameAvailability = false;
+    setUsernameAvailability('Escolha um user válido de 3 a 24 caracteres.', 'invalid');
+    return;
+  }
+  setUsernameAvailability('Verificando...', 'checking');
+  try {
+    const response = await fetch(`/api/auth/username-available?username=${encodeURIComponent(username)}`, { cache: 'no-store' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.ok) throw new Error('Falha');
+    lastUsernameAvailability = Boolean(data.available);
+    setUsernameAvailability(data.available ? '✓ Usuário disponível' : '✕ Esse usuário já existe', data.available ? 'available' : 'taken');
+  } catch {
+    lastUsernameAvailability = null;
+    setUsernameAvailability('Não foi possível verificar agora.', 'checking');
+  }
+}
+
+$('authUsername')?.addEventListener('input', () => {
+  clearTimeout(usernameCheckTimer);
+  lastUsernameAvailability = null;
+  if (state.authMode !== 'register') {
+    setUsernameAvailability();
+    return;
+  }
+  usernameCheckTimer = setTimeout(checkUsernameAvailability, 350);
+});
+
 async function submitAuth() {
   const username = $('authUsername')?.value.trim() || '';
   const password = $('authPassword')?.value || '';
@@ -257,6 +307,18 @@ async function submitAuth() {
   const remember = state.authMode === 'recover' ? true : Boolean($('authRemember')?.checked);
   const error = $('authError');
   if (error) error.classList.add('hidden');
+
+  if (state.authMode === 'register') {
+    if (lastUsernameAvailability === false) {
+      if (error) { error.textContent = 'Esse nome de usuário já está em uso. Escolha outro.'; error.classList.remove('hidden'); }
+      return;
+    }
+    if (lastUsernameAvailability === null) await checkUsernameAvailability();
+    if (lastUsernameAvailability === false) {
+      if (error) { error.textContent = 'Esse nome de usuário já está em uso. Escolha outro.'; error.classList.remove('hidden'); }
+      return;
+    }
+  }
 
   if ((state.authMode === 'register' || state.authMode === 'recover') && password !== confirm) {
     if (error) { error.textContent = 'As duas senhas precisam ser iguais.'; error.classList.remove('hidden'); }
@@ -965,7 +1027,7 @@ $('avatarInput').addEventListener('change', (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) return showToast('Escolha uma imagem válida.');
-  if (file.size > 2 * 1024 * 1024) return showToast('Use uma imagem ou GIF menor que 2 MB.');
+  if (file.size > 10 * 1024 * 1024) return showToast('Use uma imagem ou GIF de até 10 MB.');
 
   const reader = new FileReader();
   reader.onload = () => {

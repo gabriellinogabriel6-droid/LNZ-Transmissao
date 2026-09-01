@@ -10,13 +10,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: true, credentials: true },
-  maxHttpBufferSize: 6e6
+  maxHttpBufferSize: 16e6
 });
 
 const PORT = Number(process.env.PORT) || 3000;
 const rooms = new Map();
 
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '16mb' }));
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const dbPool = DATABASE_URL ? new Pool({
@@ -34,13 +34,11 @@ function persistentAccountsRequired() {
   return Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.NODE_ENV === 'production');
 }
 
-function ensurePersistentAccountStorage(res) {
-  if (databaseReady || !persistentAccountsRequired()) return true;
-  res.status(503).json({
-    ok: false,
-    error: 'O banco gratuito ainda não está conectado. Crie um PostgreSQL gratuito no Neon e cole a DATABASE_URL em Render > Environment.'
-  });
-  return false;
+function ensurePersistentAccountStorage(_res) {
+  // Contas continuam funcionando mesmo sem PostgreSQL.
+  // Com DATABASE_URL conectado, os dados ficam persistentes; sem ele,
+  // o servidor usa armazenamento em memória até o próximo reinício.
+  return true;
 }
 
 function calculateAppVersion() {
@@ -177,7 +175,7 @@ function clearSessionCookie(res) {
 
 async function initDatabase() {
   if (!dbPool) {
-    console.warn('[Banco] DATABASE_URL não configurado. Para salvar contas sem pagar no Render, conecte um PostgreSQL gratuito do Neon.');
+    console.warn('[Banco] DATABASE_URL não configurado. Contas funcionarão apenas enquanto o servidor estiver ligado.');
     return false;
   }
   try {
@@ -493,6 +491,24 @@ app.get('/api/auth/me', async (req, res) => {
     res.json({ ok: true, user: user ? { ...user, isAdmin: isAdminUser(user) } : null, persistentDatabase: databaseReady });
   } catch {
     res.status(500).json({ ok: false, error: 'Não foi possível consultar sua conta.' });
+  }
+});
+
+app.get('/api/auth/username-available', async (req, res) => {
+  const username = cleanAccountUsername(req.query?.username);
+  if (!username) return res.json({ ok: true, valid: false, available: false });
+  const key = username.toLowerCase();
+  try {
+    let exists = false;
+    if (databaseReady) {
+      const { rows } = await dbPool.query('SELECT 1 FROM users WHERE username_key=$1 LIMIT 1', [key]);
+      exists = rows.length > 0;
+    } else {
+      exists = memoryUsers.has(key);
+    }
+    res.json({ ok: true, valid: true, available: !exists });
+  } catch {
+    res.status(500).json({ ok: false, error: 'Não foi possível verificar o usuário.' });
   }
 });
 
@@ -917,7 +933,7 @@ function cleanAvatar(value) {
   const avatar = String(value || '');
   if (!avatar) return '';
   if (!avatar.startsWith('data:image/')) return '';
-  if (avatar.length > 3200000) return '';
+  if (avatar.length > 14500000) return ''; // ~10 MB de arquivo após conversão para base64
   return avatar;
 }
 

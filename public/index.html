@@ -69,7 +69,7 @@
           <button id="adjustAvatarLanding" class="btn btn-outline small-btn" type="button">✦ Ajustar foto/GIF</button>
           <button id="removeAvatarLanding" class="btn btn-outline small-btn" type="button">Remover foto</button>
         </div>
-        <small class="gif-avatar-hint">GIF animado também funciona no perfil.</small>
+        <small class="gif-avatar-hint">Foto ou GIF animado de até 10 MB funciona no perfil.</small>
         <button id="accountButton" class="btn btn-outline btn-wide account-entry-btn" type="button">👤 Entrar / Criar conta</button>
         <div id="accountSignedIn" class="account-signed-in hidden">
           <span>Conectado como <b id="accountUsernameLabel">—</b></span>
@@ -445,6 +445,7 @@
           <label for="authUsername">LOGIN</label>
           <input id="authUsername" maxlength="24" autocomplete="username" placeholder="Seu login" />
           <small class="helper">3 a 24 caracteres: letras, números, ponto, hífen ou _.</small>
+          <small id="authUsernameStatus" class="auth-username-status hidden"></small>
         </div>
         <div id="authRecoveryCodeWrap" class="field auth-field-gap hidden">
           <label for="authRecoveryCode">CÓDIGO DE RECUPERAÇÃO</label>
@@ -469,7 +470,7 @@
         <div id="authError" class="auth-error hidden"></div>
         <button id="authSubmit" class="btn btn-primary btn-wide" type="button">Entrar</button>
         <button id="forgotPasswordButton" class="auth-link-btn" type="button">Esqueci minha senha</button>
-        <small id="authDatabaseStatus" class="auth-db-status">Conta protegida por senha criptografada.</small>
+        <small id="authDatabaseStatus" class="auth-db-status">Cada nome de usuário é único no LNZ.</small>
       </div>
 
       <div id="authLoggedIn" class="auth-logged-in hidden">
@@ -685,7 +686,7 @@
       <div class="avatar-editor-buttons">
         <button id="changeAvatarFromEditor" class="btn btn-outline" type="button">Trocar foto</button>
         <button id="resetAvatarZoom" class="btn btn-outline" type="button">Resetar</button>
-        <button id="saveAvatarEditor" class="btn btn-primary" type="button">Salvar ajuste</button>
+        <button id="saveAvatarEditor" class="btn btn-primary" type="button">Salvar foto/GIF</button>
       </div>
     </div>
   </div>

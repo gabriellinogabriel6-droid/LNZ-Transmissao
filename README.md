@@ -254,3 +254,19 @@ Com `DATABASE_URL` configurado no Render, esta versão mantém no PostgreSQL:
 O navegador ainda usa cache/localStorage para abrir mais rápido, mas depois do login o **banco de dados é a fonte principal do perfil**. Assim o perfil volta em outro PC e depois de reinícios/deploys do Render.
 
 > Importante: sem `DATABASE_URL`, o site bloqueia criação/login persistente para evitar contas que desapareçam após reiniciar o servidor.
+
+
+## Limite de foto/GIF
+
+- Foto e GIF de perfil: **até 10 MB**.
+- O editor permite zoom, esquerda/direita e cima/baixo.
+- Depois do enquadramento, clique em **Salvar foto/GIF**.
+- Com o PostgreSQL conectado e a conta logada, o avatar e o enquadramento ficam salvos na conta.
+
+
+## Usuário único sem aviso de banco
+
+- A tela de login não mostra mais o aviso vermelho de `DATABASE_URL`.
+- Na aba **Criar conta**, o nome é verificado enquanto a pessoa digita.
+- Nomes são únicos sem diferenciar maiúsculas/minúsculas: `Linozera` e `linozera` contam como o mesmo usuário.
+- Sem PostgreSQL, as contas funcionam na memória do servidor e podem ser perdidas quando o Render reiniciar. Para nomes e contas permanecerem reservados para sempre, ainda é necessário um banco persistente.
