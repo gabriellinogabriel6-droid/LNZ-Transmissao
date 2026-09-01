@@ -13,7 +13,8 @@ const io = new Server(server, {
   maxHttpBufferSize: 6e6
 });
 
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number.parseInt(process.env.PORT || '10000', 10);
+const HOST = '0.0.0.0';
 const rooms = new Map();
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -290,7 +291,7 @@ app.get('/config.js', (_req, res) => {
   res.type('application/javascript').send(
     `window.LNZ_CONFIG = ${JSON.stringify({ 
       iceServers,
-      discordUrl: process.env.DISCORD_URL || 'https://discord.gg/m67kQeZrns',
+      discordUrl: process.env.DISCORD_URL || 'https://discord.gg/FEwTjXmmzS',
       brandName: process.env.BRAND_NAME || 'LNZ Transmissão',
       appVersion: APP_VERSION
     })};`
@@ -942,7 +943,7 @@ io.on('connection', (socket) => {
 });
 
 initDatabase().finally(() => {
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`LNZ Transmissão online em http://localhost:${PORT}`);
+  server.listen(PORT, HOST, () => {
+    console.log(`[Render] LNZ Transmissão ONLINE em http://${HOST}:${PORT}`);
   });
 });

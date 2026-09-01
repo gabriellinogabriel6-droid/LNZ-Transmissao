@@ -12,13 +12,9 @@ services:
         value: production
       - key: DISCORD_URL
         value: https://discord.gg/FEwTjXmmzS
-      - key: BRAND_NAME
-        value: LNZ Transmissão
-      - key: DATABASE_URL
-        sync: false
-      - key: ADMIN_USERNAME
-        sync: false
       - key: FEEDBACK_WEBHOOK_URL
+        sync: false
+      - key: DATABASE_URL
         sync: false
       - key: TURN_URL
         sync: false

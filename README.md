@@ -1,40 +1,113 @@
-# LNZ Desktop
+# LNZ Transmissão
 
-Aplicativo transmissor para usar junto com o LNZ Transmissão.
+Site de salas públicas e privadas com transmissão de tela, chat, arquivos, call de voz e feedback.
 
-## O que ele faz
+## Recursos desta versão
 
-- Entra ou cria uma sala no mesmo servidor do site.
-- Escolhe uma janela ou tela.
-- Envia vídeo por WebRTC para quem está assistindo pelo site.
-- No Windows, quando uma **janela** é escolhida, tenta capturar somente o áudio do processo daquela janela usando WASAPI Process Loopback.
-- Discord e outros aplicativos ficam fora do áudio quando a captura por processo está ativa.
-- Ao escolher **tela inteira**, o app transmite sem áudio isolado por segurança, em vez de misturar o Discord.
+- Salas públicas e privadas.
+- O dono pode **fechar e abrir a sala a qualquer momento**.
+  - Sala fechada: ninguém novo entra.
+  - Quem já está dentro continua normalmente.
+  - Sala pública fechada some da lista pública até ser reaberta.
+- Compartilhamento de tela via WebRTC.
+- **Áudio opcional da aba do navegador** na transmissão.
+  - O transmissor não ouve o próprio player, evitando retorno.
+  - O áudio geral do sistema é solicitado como excluído para reduzir captura do Discord/Windows.
+  - Para transmitir áudio, prefira selecionar uma **aba do Chrome** e marcar o áudio da aba.
+- **Call de voz** dentro da sala.
+  - Entrar/sair da call.
+  - Microfone ON/OFF.
+  - Cancelamento de eco, redução de ruído e controle automático de ganho do navegador.
+- Chat escrito em tempo real.
+- Envio de arquivos de até 2 MB: imagens, PDF, TXT, ZIP, Word, Excel e PowerPoint.
+- Executáveis e scripts perigosos são bloqueados no chat.
+- Avatar com zoom e ajuste para cima, baixo, esquerda e direita.
+- Arrastar a foto com mouse ou toque para ajustar o enquadramento.
+- Imagem LNZ como fundo com animação suave de movimento/zoom.
+- Botão do Discord oficial.
+- Formulário de feedback com envio opcional para webhook do Discord pelo servidor.
 
-## Windows necessário
+## Rodar no PC
 
-A captura por processo depende das APIs de Process Loopback do Windows. O recurso é voltado para Windows 10/11 compatível.
+```bat
+npm install
+npm start
+```
 
-## Como gerar o .EXE sem CMD
+Depois abra:
 
-1. Crie um repositório no GitHub, por exemplo `LNZ-Desktop`.
-2. Envie todos os arquivos desta pasta para a raiz do repositório.
-3. Abra a aba **Actions**.
-4. Abra **Build LNZ Desktop Windows**.
-5. Clique **Run workflow**.
-6. Quando terminar, abra a execução e baixe o artefato **LNZ-Desktop-Windows**.
-7. Dentro dele haverá o instalador e a versão portable `.exe`.
+```text
+http://localhost:3000
+```
 
-O Windows pode mostrar aviso do SmartScreen porque o aplicativo não possui certificado de assinatura de código.
+## Configuração no Render
 
-## Uso
+Em **Environment**, configure as variáveis desejadas:
 
-1. Abra o LNZ Desktop.
-2. Coloque o endereço do seu site Render, por exemplo `https://seu-site.onrender.com`.
-3. Digite seu nickname.
-4. Crie uma sala ou informe o código de uma sala existente.
-5. Escolha a janela do jogo/aplicativo.
-6. Deixe marcada a opção de áudio do aplicativo.
-7. Clique **Iniciar transmissão**.
+```env
+DISCORD_URL=https://discord.gg/FEwTjXmmzS
+BRAND_NAME=LNZ Transmissão
+FEEDBACK_WEBHOOK_URL=COLE_SEU_WEBHOOK_AQUI
+```
 
-Quem assiste não precisa instalar nada; continua usando o navegador.
+**Não coloque o webhook no GitHub.** Deixe `FEEDBACK_WEBHOOK_URL` somente nas Environment Variables do Render.
+
+Opcionalmente, para consultar os feedbacks guardados enquanto o servidor estiver ligado:
+
+```env
+FEEDBACK_ADMIN_TOKEN=ESCOLHA_UM_TOKEN_FORTE
+```
+
+A rota fica em `/admin/feedback?token=SEU_TOKEN`.
+
+## TURN (recomendado para WebRTC)
+
+Para melhorar a conexão de transmissão/call entre pessoas em redes diferentes:
+
+```env
+TURN_URL=turn:seu-servidor-turn:3478
+TURN_USERNAME=usuario
+TURN_CREDENTIAL=senha
+```
+
+Sem TURN, WebRTC funciona em muitas redes, mas pode falhar em alguns NATs/firewalls.
+
+## Observação
+
+As salas, mensagens e feedbacks ficam em memória. Quando o Render reinicia o serviço, esses dados temporários são apagados.
+
+
+## Áudio na tela inteira
+
+Esta versão tenta permitir áudio também em **Tela inteira**, além de janela/aba, quando o navegador e o sistema operacional oferecerem essa opção.
+
+Importante:
+- a janela de escolha do que compartilhar é do próprio **Chrome/Edge**, então o texto e os botões dela não podem ser personalizados pelo site;
+- em alguns PCs o navegador libera áudio da **Tela inteira**; em outros, só de **Janela** ou **Guia/Aba**;
+- se você ativar áudio na tela inteira, pode captar sons do sistema, inclusive Discord, jogo, música e notificações.
+
+## Áudio + call (ajuste mais recente)
+
+- O compartilhamento de tela inicia com envio de áudio habilitado. O navegador ainda mostra a opção de áudio disponível para a fonte escolhida.
+- `suppressLocalAudioPlayback` fica desativado: ao transmitir áudio do sistema, o site não pede ao navegador para silenciar o som local do PC/Discord.
+- O transmissor continua com o preview local mudo para não ouvir a própria transmissão dentro do site.
+- Quem assiste controla individualmente o som da transmissão com ON/OFF e volume no painel **Mix**.
+- O volume da **Call de voz** é separado do volume da **Transmissão**.
+- Participantes na call aparecem como **Falando agora**, **Na call • Em silêncio** ou **Na call • Mic OFF**. O avatar ganha destaque enquanto a pessoa fala.
+
+
+## Ajuste do feedback
+
+- O botão **Enviar feedback** foi removido da lateral/rodapé da sala.
+- Agora **Feedbacks** e **Enviar feedback** ficam no **menu principal / tela inicial**.
+
+
+## Transmissão estilo Discord — áudio separado
+
+- O padrão visual original foi mantido.
+- O compartilhamento bloqueia o áudio geral do sistema com `systemAudio: exclude`.
+- Quando o navegador suporta, solicita somente áudio da janela com `windowAudio: window`.
+- Uma guia do navegador pode enviar o áudio da própria guia.
+- Discord, chamadas e notificações do sistema não são solicitados pela transmissão.
+- O Discord continua funcionando normalmente para quem transmite.
+- Se o navegador não conseguir fornecer áudio isolado do aplicativo, a transmissão fica sem esse áudio em vez de capturar o áudio geral do PC.

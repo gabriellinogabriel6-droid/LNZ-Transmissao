@@ -1,0 +1,18 @@
+IMPORTANTE — NÃO MISTURE O SITE COM O LNZ DESKTOP
+
+REPOSITÓRIO 1: LNZ-Transmissao
+- Coloque SOMENTE os arquivos deste ZIP.
+- Este repositório fica conectado ao Render.
+- Build Command: npm install
+- Start Command: npm start
+- Health Check Path: /healthz
+- NÃO coloque arquivos do LNZ Desktop aqui.
+
+REPOSITÓRIO 2: LNZ-Desktop-Windows
+- Coloque SOMENTE os arquivos do ZIP LNZ-Desktop-Windows-Fonte.
+- NÃO conecte este repositório ao Render.
+- Vá em GitHub > Actions > Build LNZ Desktop Windows > Run workflow.
+- O .exe aparecerá em Artifacts quando a execução terminar.
+
+O erro npm install do Render acontece quando dependências do Desktop/Windows
+são misturadas no repositório do site Linux.

@@ -13,7 +13,7 @@ LNZ TRANSMISSÃO - ATUALIZAÇÃO
 
 3. No Render > seu serviço > Environment, adicione:
    FEEDBACK_WEBHOOK_URL = o webhook do Discord que você quer usar
-   DISCORD_URL = https://discord.gg/m67kQeZrns
+   DISCORD_URL = https://discord.gg/FEwTjXmmzS
 
 4. NÃO coloque o webhook dentro do GitHub.
 

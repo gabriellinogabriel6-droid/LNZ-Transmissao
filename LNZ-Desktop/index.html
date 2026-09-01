@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LNZ Desktop</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="assets/logo.png" alt="LNZ"><div><strong>LNZ Desktop</strong><span>Transmissão com áudio separado por aplicativo</span></div></div>
+    <div id="nativeBadge" class="badge">Verificando áudio...</div>
+  </header>
+
+  <main class="layout">
+    <section class="panel setup">
+      <h1>Transmitir sem vazar o Discord</h1>
+      <p>Escolha uma janela do jogo ou aplicativo. O LNZ captura somente o áudio desse processo e envia para sua sala.</p>
+
+      <label>SITE / SERVIDOR</label>
+      <input id="serverUrl" placeholder="https://seu-site.onrender.com" />
+
+      <div class="row">
+        <div><label>NICKNAME</label><input id="nickname" maxlength="24" placeholder="Seu nome" /></div>
+        <div><label>CÓDIGO DA SALA</label><input id="roomCode" maxlength="12" placeholder="ABCD-1234" /></div>
+      </div>
+
+      <label>SENHA DA SALA <span>(se for privada)</span></label>
+      <input id="roomPassword" type="password" placeholder="Opcional" />
+
+      <div class="actions">
+        <button id="joinRoom" class="primary">Entrar na sala</button>
+        <button id="createRoom">Criar sala pública</button>
+      </div>
+
+      <div id="roomStatus" class="status">Ainda não conectado a uma sala.</div>
+    </section>
+
+    <section class="panel capture">
+      <div class="capture-head">
+        <div><h2>Escolha o que transmitir</h2><p>Para áudio isolado, escolha uma <b>janela</b>, não a tela inteira.</p></div>
+        <button id="refreshSources">Atualizar</button>
+      </div>
+
+      <div id="sources" class="sources"></div>
+
+      <div class="share-options">
+        <label class="check"><input id="sendAppAudio" type="checkbox" checked><span>Enviar áudio somente do aplicativo</span></label>
+        <small>Discord, sua voz no Discord e a voz do seu amigo não entram.</small>
+      </div>
+
+      <div class="actions share-actions">
+        <button id="startShare" class="primary" disabled>▶ Iniciar transmissão</button>
+        <button id="stopShare" class="danger" disabled>■ Parar</button>
+      </div>
+    </section>
+
+    <section class="panel preview-panel">
+      <div class="preview-head"><h2>Prévia</h2><span id="shareState">OFF</span></div>
+      <video id="preview" autoplay muted playsinline></video>
+      <div id="message" class="message">Selecione uma janela.</div>
+    </section>
+  </main>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
