@@ -18,7 +18,7 @@ app.disable('x-powered-by');
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, rooms: rooms.size });
+  res.json({ ok: true, rooms: rooms.size, feedbacks: feedbackItems.length });
 });
 
 app.get('/config.js', (_req, res) => {
@@ -41,6 +41,14 @@ app.get('/config.js', (_req, res) => {
       brandName: process.env.BRAND_NAME || 'LNZ Transmissão'
     })};`
   );
+});
+
+
+app.get('/admin/feedback', (req, res) => {
+  const configured = String(process.env.FEEDBACK_ADMIN_TOKEN || '').trim();
+  const supplied = String(req.query.token || '').trim();
+  if (!configured || supplied !== configured) return res.status(403).json({ ok: false, error: 'Acesso negado.' });
+  res.json({ ok: true, feedbacks: feedbackItems.slice().reverse() });
 });
 
 // Permite abrir links como /room/ABCD-1234 diretamente.
@@ -167,6 +175,73 @@ function chatMessageView(message) {
   return view;
 }
 
+
+const feedbackItems = [];
+const MAX_FEEDBACK_ITEMS = 200;
+
+function cleanFeedbackText(value, max = 1000) {
+  return String(value || '').replace(/\r\n/g, '\n').trim().slice(0, max);
+}
+
+function cleanFeedbackType(value) {
+  const allowed = new Set(['elogio', 'sugestao', 'bug', 'outro']);
+  const type = String(value || '').toLowerCase();
+  return allowed.has(type) ? type : 'outro';
+}
+
+function cleanFeedbackRating(value) {
+  const rating = Number(value);
+  if (!Number.isFinite(rating)) return 0;
+  return Math.min(5, Math.max(1, Math.round(rating)));
+}
+
+async function forwardFeedbackToDiscord(item) {
+  const webhook = String(process.env.FEEDBACK_WEBHOOK_URL || '').trim();
+  if (!webhook) return { sent: false, reason: 'not-configured' };
+  if (!/^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//i.test(webhook)) {
+    return { sent: false, reason: 'invalid-webhook' };
+  }
+
+  const typeLabels = {
+    elogio: '💜 Elogio',
+    sugestao: '💡 Sugestão',
+    bug: '🐞 Problema / Bug',
+    outro: '📝 Outro'
+  };
+  const stars = item.rating ? `${'⭐'.repeat(item.rating)} (${item.rating}/5)` : 'Sem nota';
+  const fields = [
+    { name: 'Tipo', value: typeLabels[item.type] || typeLabels.outro, inline: true },
+    { name: 'Nota', value: stars, inline: true },
+    { name: 'Usuário', value: item.nickname || 'Visitante', inline: true }
+  ];
+  if (item.roomCode) fields.push({ name: 'Sala', value: item.roomCode, inline: true });
+  if (item.contact) fields.push({ name: 'Contato', value: item.contact, inline: false });
+
+  const body = {
+    username: 'LNZ Feedback',
+    embeds: [{
+      title: 'Novo feedback no LNZ Transmissão',
+      description: item.message,
+      color: 0x8f50ff,
+      fields,
+      timestamp: new Date(item.createdAt).toISOString(),
+      footer: { text: 'LNZ Transmissão • Feedback' }
+    }]
+  };
+
+  try {
+    const response = await fetch(webhook, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return { sent: response.ok, reason: response.ok ? 'ok' : `http-${response.status}` };
+  } catch (error) {
+    console.error('Falha ao enviar feedback para Discord:', error?.message || error);
+    return { sent: false, reason: 'request-failed' };
+  }
+}
+
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   const digest = crypto.scryptSync(String(password), salt, 64).toString('hex');
   return `${salt}:${digest}`;
@@ -190,6 +265,7 @@ function roomPublicView(room) {
     visibility: room.visibility,
     participants: room.participants.size,
     sharing: Boolean(room.sharerId),
+    isOpen: room.isOpen !== false,
     createdAt: room.createdAt
   };
 }
@@ -203,7 +279,9 @@ function participantView(id, participant, room) {
     avatarOffsetX: cleanAvatarOffsetX(participant.avatarOffsetX),
     avatarOffsetY: cleanAvatarOffsetY(participant.avatarOffsetY),
     isHost: room.hostId === id,
-    isSharer: room.sharerId === id
+    isSharer: room.sharerId === id,
+    inVoice: Boolean(participant.inVoice),
+    micMuted: Boolean(participant.micMuted)
   };
 }
 
@@ -213,7 +291,7 @@ function participantsFor(room) {
 
 function publicRooms() {
   return [...rooms.values()]
-    .filter((room) => room.visibility === 'public')
+    .filter((room) => room.visibility === 'public' && room.isOpen !== false)
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 40)
     .map(roomPublicView);
@@ -239,6 +317,10 @@ function removeSocketFromRoom(socket, reason = 'left') {
   socket.data.roomCode = null;
   if (!room) return;
 
+  const leavingParticipant = room.participants.get(socket.id);
+  if (leavingParticipant?.inVoice) {
+    socket.to(code).emit('voice-user-left', { userId: socket.id });
+  }
   room.participants.delete(socket.id);
   socket.leave(code);
 
@@ -300,6 +382,7 @@ io.on('connection', (socket) => {
       passwordHash: mode === 'private' ? hashPassword(pass) : null,
       hostId: socket.id,
       sharerId: null,
+      isOpen: true,
       createdAt: Date.now(),
       participants: new Map(),
       chatMessages: [],
@@ -311,7 +394,9 @@ io.on('connection', (socket) => {
       avatar: cleanAvatar(avatar),
       avatarScale: cleanAvatarScale(avatarScale),
       avatarOffsetX: cleanAvatarOffsetX(avatarOffsetX),
-      avatarOffsetY: cleanAvatarOffsetY(avatarOffsetY)
+      avatarOffsetY: cleanAvatarOffsetY(avatarOffsetY),
+      inVoice: false,
+      micMuted: false
     });
 
     rooms.set(code, room);
@@ -337,6 +422,7 @@ io.on('connection', (socket) => {
 
     if (!room) return callback({ ok: false, error: 'Sala não encontrada ou encerrada.' });
     if (!cleanName) return callback({ ok: false, error: 'Digite seu nickname.' });
+    if (room.isOpen === false) return callback({ ok: false, error: 'Essa sala está fechada pelo dono no momento.' });
     if (room.visibility === 'private' && !verifyPassword(password, room.passwordHash)) {
       return callback({ ok: false, error: 'Senha da sala incorreta.' });
     }
@@ -348,7 +434,9 @@ io.on('connection', (socket) => {
       avatar: cleanAvatar(avatar),
       avatarScale: cleanAvatarScale(avatarScale),
       avatarOffsetX: cleanAvatarOffsetX(avatarOffsetX),
-      avatarOffsetY: cleanAvatarOffsetY(avatarOffsetY)
+      avatarOffsetY: cleanAvatarOffsetY(avatarOffsetY),
+      inVoice: false,
+      micMuted: false
     });
     socket.join(code);
     socket.data.roomCode = code;
@@ -368,6 +456,23 @@ io.on('connection', (socket) => {
     if (room.sharerId && room.sharerId !== socket.id) {
       io.to(room.sharerId).emit('viewer-joined', { viewerId: socket.id });
     }
+  });
+
+  socket.on('set-room-access', ({ open }, callback = () => {}) => {
+    const code = socket.data.roomCode;
+    const room = rooms.get(code);
+    if (!room || !room.participants.has(socket.id)) {
+      return callback({ ok: false, error: 'Você não está em uma sala.' });
+    }
+    if (room.hostId !== socket.id) {
+      return callback({ ok: false, error: 'Somente o dono da sala pode abrir ou fechar a entrada.' });
+    }
+
+    room.isOpen = Boolean(open);
+    callback({ ok: true, isOpen: room.isOpen });
+    io.to(code).emit('room-access-changed', { isOpen: room.isOpen, changedBy: socket.id });
+    broadcastRoomState(room);
+    broadcastPublicRooms();
   });
 
   socket.on('send-chat-message', ({ text, attachment }, callback = () => {}) => {
@@ -407,6 +512,89 @@ io.on('connection', (socket) => {
     addChatMessage(room, message, fileResult.bytes);
     io.to(code).emit('chat-message', chatMessageView(message));
     callback({ ok: true, messageId: message.id });
+  });
+
+  socket.on('join-voice', (_payload, callback = () => {}) => {
+    const code = socket.data.roomCode;
+    const room = rooms.get(code);
+    const participant = room?.participants.get(socket.id);
+    if (!room || !participant) return callback({ ok: false, error: 'Você não está em uma sala.' });
+
+    const peerIds = [...room.participants.entries()]
+      .filter(([id, person]) => id !== socket.id && person.inVoice)
+      .map(([id]) => id);
+
+    participant.inVoice = true;
+    participant.micMuted = false;
+    callback({ ok: true, peerIds });
+    socket.to(code).emit('voice-user-joined', { userId: socket.id });
+    broadcastRoomState(room);
+  });
+
+  socket.on('leave-voice', (_payload, callback = () => {}) => {
+    const code = socket.data.roomCode;
+    const room = rooms.get(code);
+    const participant = room?.participants.get(socket.id);
+    if (room && participant?.inVoice) {
+      participant.inVoice = false;
+      participant.micMuted = false;
+      socket.to(code).emit('voice-user-left', { userId: socket.id });
+      broadcastRoomState(room);
+    }
+    callback({ ok: true });
+  });
+
+  socket.on('voice-mic-state', ({ muted }, callback = () => {}) => {
+    const code = socket.data.roomCode;
+    const room = rooms.get(code);
+    const participant = room?.participants.get(socket.id);
+    if (!room || !participant?.inVoice) return callback({ ok: false });
+    participant.micMuted = Boolean(muted);
+    broadcastRoomState(room);
+    callback({ ok: true });
+  });
+
+  socket.on('voice-signal', ({ target, data }) => {
+    if (!target || !data) return;
+    const sourceCode = socket.data.roomCode;
+    const targetSocket = io.sockets.sockets.get(target);
+    if (!sourceCode || !targetSocket || targetSocket.data.roomCode !== sourceCode) return;
+    io.to(target).emit('voice-signal', { from: socket.id, data });
+  });
+
+
+  socket.on('submit-feedback', async ({ type, rating, message, contact }, callback = () => {}) => {
+    const now = Date.now();
+    if (socket.data.lastFeedbackAt && now - socket.data.lastFeedbackAt < 8000) {
+      return callback({ ok: false, error: 'Espere alguns segundos antes de enviar outro feedback.' });
+    }
+
+    const cleanMessage = cleanFeedbackText(message, 1000);
+    const cleanContact = cleanFeedbackText(contact, 100);
+    const cleanType = cleanFeedbackType(type);
+    const cleanRating = cleanFeedbackRating(rating);
+    if (cleanMessage.length < 3) return callback({ ok: false, error: 'Escreva um feedback com pelo menos 3 caracteres.' });
+
+    const room = rooms.get(socket.data.roomCode);
+    const participant = room?.participants.get(socket.id);
+    const item = {
+      id: crypto.randomUUID(),
+      type: cleanType,
+      rating: cleanRating,
+      message: cleanMessage,
+      contact: cleanContact,
+      nickname: participant?.nickname || '',
+      roomCode: room?.code || '',
+      createdAt: now
+    };
+
+    feedbackItems.push(item);
+    while (feedbackItems.length > MAX_FEEDBACK_ITEMS) feedbackItems.shift();
+    socket.data.lastFeedbackAt = now;
+
+    const discordResult = await forwardFeedbackToDiscord(item);
+    console.log(`[Feedback] ${item.type} ${item.rating}/5 ${item.nickname || 'Visitante'}: ${item.message.slice(0, 120)}`);
+    callback({ ok: true, sentToDiscord: discordResult.sent });
   });
 
   socket.on('leave-room', (_payload, callback = () => {}) => {

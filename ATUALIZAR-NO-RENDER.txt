@@ -1,0 +1,32 @@
+LNZ TRANSMISSÃO - ATUALIZAÇÃO
+
+1. No GitHub, substitua estes arquivos/pastas pela versão deste ZIP:
+   server.js
+   public/app.js
+   public/index.html
+   public/style.css
+   public/assets/background-app.png
+   README.md
+   .env.example
+
+2. Confirme as alterações (Commit changes).
+
+3. No Render > seu serviço > Environment, adicione:
+   FEEDBACK_WEBHOOK_URL = o webhook do Discord que você quer usar
+   DISCORD_URL = https://discord.gg/m67kQeZrns
+
+4. NÃO coloque o webhook dentro do GitHub.
+
+5. Espere o Render fazer o deploy. Se não fizer:
+   Manual Deploy > Deploy latest commit
+
+6. Abra o site e use Ctrl + F5.
+
+NOVO NESTA VERSÃO:
+- Call de voz com microfone ON/OFF.
+- Chat e envio de arquivos.
+- Ajuste completo da foto/avatar.
+- Fundo LNZ animado.
+- Feedback para Discord via variável do Render.
+- Dono pode abrir/fechar a entrada da sala.
+- Áudio opcional da aba na transmissão sem retorno no player do transmissor.

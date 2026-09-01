@@ -91,7 +91,7 @@
       <h2>Antes de entrar</h2>
       <p>Escolha como você vai aparecer para os outros participantes.</p>
 
-      <div class="room-pill-row">Sala <span id="prejoinRoomCode" class="code-pill">----</span> <span id="prejoinPrivacy" class="privacy-pill"></span></div>
+      <div class="room-pill-row">Sala <span id="prejoinRoomCode" class="code-pill">----</span> <span id="prejoinPrivacy" class="privacy-pill"></span> <span id="prejoinAccess" class="access-pill open">ABERTA</span></div>
 
       <button id="prejoinAvatarButton" class="avatar-button avatar-large" type="button">
         <img id="prejoinAvatarImage" class="hidden" alt="Avatar" />
@@ -129,6 +129,7 @@
       </div>
       <div class="room-status">
         <a id="roomDiscordLink" class="top-discord-link hidden" href="#" target="_blank" rel="noopener noreferrer">Discord</a>
+        <span id="roomAccessBadge" class="access-pill open">ABERTA</span>
         <span id="topPeople" class="people-chip">♙ 0</span>
         <span class="connected"><i></i> Conectado</span>
       </div>
@@ -140,6 +141,7 @@
         <div class="invite-code-line"><strong id="sidebarRoomCode">----</strong><button id="copyCode" title="Copiar código">⧉</button></div>
         <div id="sidebarPrivacy" class="privacy-line"></div>
         <button id="copyInvite" class="btn btn-outline btn-wide">🔗 Copiar link do convite</button>
+        <button id="toggleRoomAccess" class="btn btn-room-access btn-wide hidden" type="button">🔒 Fechar sala</button>
       </div>
 
       <div class="participants-heading">NA SALA — <span id="participantCount">0</span></div>
@@ -174,7 +176,10 @@
       <div class="room-controls">
         <button id="shareControl" class="btn btn-primary control-main">▣ Compartilhar tela</button>
         <span></span>
-        <button id="audioControl" class="control-audio" type="button" title="Modo anti-retorno: nenhum áudio é transmitido" disabled>🔇 Áudio bloqueado</button>
+        <button id="voiceCallControl" class="control-voice" type="button" title="Entrar na call de voz">📞 Entrar na call</button>
+        <button id="micControl" class="control-voice mic-control" type="button" title="Ligar/desligar microfone" disabled>🎙 Mic ON</button>
+        <span></span>
+        <button id="audioControl" class="control-audio" type="button" title="Ativar áudio da aba na próxima transmissão">🔇 Áudio da aba OFF</button>
         <span></span>
         <button id="chatControl" class="control-chat" type="button" title="Abrir chat">💬 Chat <b id="chatUnread" class="chat-unread hidden">0</b></button>
         <span></span>
@@ -182,6 +187,7 @@
         <span></span>
         <button id="leaveControl" class="control-icon leave-icon" title="Sair da sala">↪</button>
       </div>
+      <div id="voiceAudioContainer" class="voice-audio-container" aria-hidden="true"></div>
     </section>
 
     <aside id="chatPanel" class="chat-panel">
@@ -220,6 +226,8 @@
     </aside>
   </main>
 
+  <button id="feedbackButton" class="feedback-fab" type="button" title="Enviar feedback">💜 <span>Feedback</span></button>
+
   <div id="createModal" class="modal hidden" aria-hidden="true">
     <div class="modal-backdrop" data-close-modal="true"></div>
     <div class="modal-card glass-card">
@@ -247,6 +255,52 @@
       </div>
 
       <button id="createRoomConfirm" class="btn btn-primary btn-wide">Criar sala pública</button>
+    </div>
+  </div>
+
+  <div id="feedbackModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close-feedback="true"></div>
+    <div class="modal-card glass-card feedback-card">
+      <div class="modal-head">
+        <div><span>FEEDBACK</span><h2>Ajude a melhorar o LNZ</h2></div>
+        <button id="closeFeedback" class="modal-close" type="button">×</button>
+      </div>
+
+      <p class="feedback-intro">Conte o que gostou, o que pode melhorar ou se encontrou algum problema.</p>
+
+      <div class="field">
+        <label>TIPO DE FEEDBACK</label>
+        <div class="feedback-type-grid">
+          <button class="feedback-type active" type="button" data-feedback-type="sugestao">💡 Sugestão</button>
+          <button class="feedback-type" type="button" data-feedback-type="elogio">💜 Elogio</button>
+          <button class="feedback-type" type="button" data-feedback-type="bug">🐞 Problema</button>
+          <button class="feedback-type" type="button" data-feedback-type="outro">📝 Outro</button>
+        </div>
+      </div>
+
+      <div class="field feedback-rating-field">
+        <div class="label-line"><label>SUA NOTA</label><small id="feedbackRatingText">5/5</small></div>
+        <div id="feedbackStars" class="feedback-stars" role="radiogroup" aria-label="Nota do feedback">
+          <button type="button" data-rating="1" aria-label="1 estrela">★</button>
+          <button type="button" data-rating="2" aria-label="2 estrelas">★</button>
+          <button type="button" data-rating="3" aria-label="3 estrelas">★</button>
+          <button type="button" data-rating="4" aria-label="4 estrelas">★</button>
+          <button type="button" data-rating="5" aria-label="5 estrelas">★</button>
+        </div>
+      </div>
+
+      <div class="field feedback-message-field">
+        <div class="label-line"><label for="feedbackMessage">SUA MENSAGEM</label><small id="feedbackMessageCount">0/1000</small></div>
+        <textarea id="feedbackMessage" maxlength="1000" rows="5" placeholder="Escreva aqui seu feedback..."></textarea>
+      </div>
+
+      <div class="field feedback-contact-field">
+        <label for="feedbackContact">CONTATO (OPCIONAL)</label>
+        <input id="feedbackContact" maxlength="100" placeholder="Discord ou e-mail, se quiser resposta" />
+      </div>
+
+      <button id="sendFeedback" class="btn btn-primary btn-wide" type="button">Enviar feedback</button>
+      <small class="feedback-privacy">Não envie senhas, tokens ou informações privadas.</small>
     </div>
   </div>
 

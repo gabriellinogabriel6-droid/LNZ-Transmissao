@@ -21,11 +21,20 @@ const state = {
   unreadChat: 0,
   selectedVisibility: 'public',
   shareAudio: false,
+  remoteAudioMuted: false,
   isSharing: false,
   localStream: null,
   sharerId: null,
   outboundPeers: new Map(),
-  inboundPeer: null
+  inboundPeer: null,
+  voiceJoined: false,
+  voiceMuted: false,
+  voiceStream: null,
+  voicePeers: new Map(),
+  voiceAudios: new Map(),
+  voicePendingIce: new Map(),
+  feedbackType: 'sugestao',
+  feedbackRating: 5
 };
 
 function applyDiscordLinks() {
@@ -60,6 +69,59 @@ function showToast(message) {
   toast.classList.add('show');
   clearTimeout(showToast.timer);
   showToast.timer = setTimeout(() => toast.classList.remove('show'), 2400);
+}
+
+
+function updateFeedbackUI() {
+  document.querySelectorAll('.feedback-type').forEach((button) => {
+    button.classList.toggle('active', button.dataset.feedbackType === state.feedbackType);
+  });
+  document.querySelectorAll('#feedbackStars button').forEach((button) => {
+    const active = Number(button.dataset.rating) <= state.feedbackRating;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-checked', String(Number(button.dataset.rating) === state.feedbackRating));
+  });
+  const ratingText = $('feedbackRatingText');
+  if (ratingText) ratingText.textContent = `${state.feedbackRating}/5`;
+}
+
+function openFeedbackModal() {
+  state.feedbackType = 'sugestao';
+  state.feedbackRating = 5;
+  $('feedbackMessage').value = '';
+  $('feedbackContact').value = '';
+  $('feedbackMessageCount').textContent = '0/1000';
+  updateFeedbackUI();
+  $('feedbackModal').classList.remove('hidden');
+  $('feedbackModal').setAttribute('aria-hidden', 'false');
+  setTimeout(() => $('feedbackMessage')?.focus(), 80);
+}
+
+function closeFeedbackModal() {
+  $('feedbackModal').classList.add('hidden');
+  $('feedbackModal').setAttribute('aria-hidden', 'true');
+}
+
+async function submitFeedback() {
+  const message = $('feedbackMessage').value.trim();
+  const contact = $('feedbackContact').value.trim();
+  if (message.length < 3) return showToast('Escreva um feedback um pouco mais detalhado.');
+
+  const button = $('sendFeedback');
+  button.disabled = true;
+  button.textContent = 'Enviando...';
+  const result = await new Promise((resolve) => socket.emit('submit-feedback', {
+    type: state.feedbackType,
+    rating: state.feedbackRating,
+    message,
+    contact
+  }, resolve));
+  button.disabled = false;
+  button.textContent = 'Enviar feedback';
+
+  if (!result?.ok) return showToast(result?.error || 'Não foi possível enviar o feedback.');
+  closeFeedbackModal();
+  showToast(result.sentToDiscord ? 'Feedback enviado. Obrigado! 💜' : 'Feedback recebido. Obrigado! 💜');
 }
 
 async function copyText(text, label = 'Texto') {
@@ -392,6 +454,12 @@ async function openPrejoin(code) {
   $('prejoinRoomCode').textContent = info.room.code;
   $('prejoinPrivacy').textContent = info.room.visibility === 'private' ? '🔒 PRIVADA' : '◎ PÚBLICA';
   $('prejoinPrivacy').className = `privacy-pill ${info.room.visibility}`;
+  const access = $('prejoinAccess');
+  const roomOpen = info.room.isOpen !== false;
+  access.textContent = roomOpen ? 'ABERTA' : 'FECHADA';
+  access.className = `access-pill ${roomOpen ? 'open' : 'closed'}`;
+  $('enterRoom').disabled = !roomOpen;
+  $('enterRoom').textContent = roomOpen ? 'Entrar na sala →' : 'Sala fechada';
   $('passwordField').classList.toggle('hidden', !info.requiresPassword);
   $('roomPassword').value = '';
   $('prejoinNickname').value = $('landingNickname').value || state.nickname;
@@ -415,6 +483,7 @@ $('roomCodeInput').addEventListener('keydown', (event) => {
 
 $('enterRoom').addEventListener('click', async () => {
   if (!state.room) return;
+  if (state.room.isOpen === false) return showToast('Essa sala está fechada pelo dono.');
   const nickname = $('prejoinNickname').value.trim();
   if (!nickname) return showToast('Digite seu nickname.');
 
@@ -462,11 +531,21 @@ function renderRoom() {
   $('sidebarRoomCode').textContent = code;
   $('topPeople').textContent = `♙ ${state.participants.length}`;
   $('participantCount').textContent = String(state.participants.length);
+  const roomOpen = state.room.isOpen !== false;
+  const accessBadge = $('roomAccessBadge');
+  accessBadge.textContent = roomOpen ? 'ABERTA' : 'FECHADA';
+  accessBadge.className = `access-pill ${roomOpen ? 'open' : 'closed'}`;
+  const meParticipant = state.participants.find((p) => p.id === state.me);
+  const accessButton = $('toggleRoomAccess');
+  const isHost = Boolean(meParticipant?.isHost);
+  accessButton.classList.toggle('hidden', !isHost);
+  accessButton.textContent = roomOpen ? '🔒 Fechar sala' : '🔓 Abrir sala';
+  accessButton.classList.toggle('closed-state', !roomOpen);
   $('sidebarPrivacy').innerHTML = state.room.visibility === 'private'
     ? '<span class="privacy-pill private">🔒 PRIVADA</span><small>Senha necessária</small>'
     : '<span class="privacy-pill public">◎ PÚBLICA</span><small>Visível na lista pública</small>';
 
-  const me = state.participants.find((p) => p.id === state.me);
+  const me = meParticipant;
   $('meName').textContent = me?.nickname || state.nickname || 'Você';
   const meMini = $('meMiniAvatar');
   if (me?.avatar) {
@@ -505,6 +584,7 @@ function renderRoom() {
     const badges = document.createElement('div');
     badges.className = 'participant-badges';
     if (person.isHost) badges.innerHTML += '<b title="Dono da sala">♛</b>';
+    if (person.inVoice) badges.innerHTML += person.micMuted ? '<span class="voice-badge muted" title="Na call com microfone mutado">🔇</span>' : '<span class="voice-badge" title="Na call de voz">🎙</span>';
     if (person.id === state.me) badges.innerHTML += '<em>VOCÊ</em>';
 
     row.append(avatar, details, badges);
@@ -520,6 +600,23 @@ $('copyCode').addEventListener('click', () => copyText(state.room?.code || '', '
 $('topRoomCode').addEventListener('click', () => copyText(state.room?.code || '', 'Código'));
 $('copyInvite').addEventListener('click', () => copyText(roomInviteLink(), 'Link'));
 $('copyInviteCenter').addEventListener('click', () => copyText(roomInviteLink(), 'Link'));
+
+$('toggleRoomAccess').addEventListener('click', async () => {
+  if (!state.room) return;
+  const nextOpen = state.room.isOpen === false;
+  const result = await new Promise((resolve) => socket.emit('set-room-access', { open: nextOpen }, resolve));
+  if (!result?.ok) return showToast(result?.error || 'Não foi possível alterar a sala.');
+  state.room.isOpen = result.isOpen;
+  renderRoom();
+  showToast(result.isOpen ? 'Sala aberta para novas entradas.' : 'Sala fechada. Quem já entrou continua na sala.');
+});
+
+socket.on('room-access-changed', ({ isOpen, changedBy }) => {
+  if (!state.room) return;
+  state.room.isOpen = Boolean(isOpen);
+  renderRoom();
+  if (changedBy !== state.me) showToast(isOpen ? 'A sala foi aberta pelo dono.' : 'A sala foi fechada pelo dono.');
+});
 
 const CHAT_MAX_FILE_SIZE = 2 * 1024 * 1024;
 const CHAT_ALLOWED_EXTENSIONS = new Set([
@@ -784,17 +881,209 @@ window.addEventListener('resize', () => {
   }
 });
 
+function voicePeerConnection() {
+  return new RTCPeerConnection({ iceServers: config.iceServers });
+}
+
+function removeVoiceAudio(peerId) {
+  const audio = state.voiceAudios.get(peerId);
+  if (audio) {
+    audio.srcObject = null;
+    audio.remove();
+  }
+  state.voiceAudios.delete(peerId);
+}
+
+function closeVoicePeer(peerId) {
+  const pc = state.voicePeers.get(peerId);
+  if (pc) pc.close();
+  state.voicePeers.delete(peerId);
+  state.voicePendingIce.delete(peerId);
+  removeVoiceAudio(peerId);
+}
+
+function closeAllVoicePeers() {
+  for (const peerId of [...state.voicePeers.keys()]) closeVoicePeer(peerId);
+}
+
+function attachRemoteVoice(peerId, stream) {
+  let audio = state.voiceAudios.get(peerId);
+  if (!audio) {
+    audio = document.createElement('audio');
+    audio.autoplay = true;
+    audio.playsInline = true;
+    audio.dataset.peerId = peerId;
+    $('voiceAudioContainer').appendChild(audio);
+    state.voiceAudios.set(peerId, audio);
+  }
+  audio.srcObject = stream;
+  audio.muted = false;
+  audio.volume = 1;
+  audio.play().catch(() => {});
+}
+
+async function flushVoiceIce(peerId, pc) {
+  const queued = state.voicePendingIce.get(peerId) || [];
+  state.voicePendingIce.delete(peerId);
+  for (const candidate of queued) {
+    try { await pc.addIceCandidate(candidate); } catch {}
+  }
+}
+
+async function createVoicePeer(peerId, initiator = false) {
+  if (!state.voiceJoined || !state.voiceStream || !peerId || peerId === state.me) return null;
+  if (state.voicePeers.has(peerId)) return state.voicePeers.get(peerId);
+
+  const pc = voicePeerConnection();
+  state.voicePeers.set(peerId, pc);
+  state.voiceStream.getAudioTracks().forEach((track) => pc.addTrack(track, state.voiceStream));
+
+  pc.onicecandidate = (event) => {
+    if (event.candidate) socket.emit('voice-signal', { target: peerId, data: { type: 'ice', candidate: event.candidate } });
+  };
+  pc.ontrack = (event) => {
+    const stream = event.streams?.[0];
+    if (stream) attachRemoteVoice(peerId, stream);
+  };
+  pc.onconnectionstatechange = () => {
+    if (['failed', 'closed'].includes(pc.connectionState)) closeVoicePeer(peerId);
+  };
+
+  if (initiator) {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('voice-signal', { target: peerId, data: { type: 'offer', sdp: pc.localDescription } });
+  }
+  return pc;
+}
+
+function updateVoiceControls() {
+  const call = $('voiceCallControl');
+  const mic = $('micControl');
+  if (!call || !mic) return;
+  call.textContent = state.voiceJoined ? '📞 Sair da call' : '📞 Entrar na call';
+  call.classList.toggle('voice-active', state.voiceJoined);
+  mic.disabled = !state.voiceJoined;
+  mic.textContent = state.voiceMuted ? '🔇 Mic OFF' : '🎙 Mic ON';
+  mic.classList.toggle('mic-muted', state.voiceMuted);
+}
+
+async function joinVoiceCall() {
+  if (!state.room || state.voiceJoined) return;
+  if (!navigator.mediaDevices?.getUserMedia) return showToast('Seu navegador não permite usar o microfone.');
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1
+      },
+      video: false
+    });
+
+    const result = await new Promise((resolve) => socket.emit('join-voice', {}, resolve));
+    if (!result?.ok) {
+      stream.getTracks().forEach((track) => track.stop());
+      return showToast(result?.error || 'Não foi possível entrar na call.');
+    }
+
+    state.voiceStream = stream;
+    state.voiceJoined = true;
+    state.voiceMuted = false;
+    updateVoiceControls();
+    showToast('Você entrou na call de voz.');
+
+    for (const peerId of result.peerIds || []) {
+      createVoicePeer(peerId, true).catch(() => {});
+    }
+  } catch (error) {
+    if (error?.name === 'NotAllowedError') showToast('Permita o acesso ao microfone para entrar na call.');
+    else showToast('Não foi possível abrir o microfone.');
+  }
+}
+
+async function leaveVoiceCall(notifyServer = true) {
+  if (notifyServer && state.voiceJoined) {
+    await new Promise((resolve) => socket.emit('leave-voice', {}, resolve));
+  }
+  closeAllVoicePeers();
+  state.voiceStream?.getTracks().forEach((track) => track.stop());
+  state.voiceStream = null;
+  state.voiceJoined = false;
+  state.voiceMuted = false;
+  updateVoiceControls();
+}
+
+function toggleVoiceMic() {
+  if (!state.voiceJoined || !state.voiceStream) return;
+  state.voiceMuted = !state.voiceMuted;
+  state.voiceStream.getAudioTracks().forEach((track) => { track.enabled = !state.voiceMuted; });
+  socket.emit('voice-mic-state', { muted: state.voiceMuted }, () => {});
+  updateVoiceControls();
+}
+
+$('voiceCallControl').addEventListener('click', () => {
+  if (state.voiceJoined) leaveVoiceCall(true);
+  else joinVoiceCall();
+});
+$('micControl').addEventListener('click', toggleVoiceMic);
+
+socket.on('voice-user-left', ({ userId }) => {
+  closeVoicePeer(userId);
+});
+
+socket.on('voice-signal', async ({ from, data }) => {
+  if (!state.voiceJoined || !from || !data) return;
+  try {
+    if (data.type === 'offer') {
+      let pc = state.voicePeers.get(from);
+      if (!pc) pc = await createVoicePeer(from, false);
+      await pc.setRemoteDescription(data.sdp);
+      await flushVoiceIce(from, pc);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('voice-signal', { target: from, data: { type: 'answer', sdp: pc.localDescription } });
+      return;
+    }
+    if (data.type === 'answer') {
+      const pc = state.voicePeers.get(from);
+      if (pc) {
+        await pc.setRemoteDescription(data.sdp);
+        await flushVoiceIce(from, pc);
+      }
+      return;
+    }
+    if (data.type === 'ice' && data.candidate) {
+      const pc = state.voicePeers.get(from);
+      if (pc && pc.remoteDescription) {
+        await pc.addIceCandidate(data.candidate);
+      } else {
+        const queued = state.voicePendingIce.get(from) || [];
+        queued.push(data.candidate);
+        state.voicePendingIce.set(from, queued);
+      }
+    }
+  } catch {
+    closeVoicePeer(from);
+  }
+});
+
 function makePeerConnection() {
   return new RTCPeerConnection({ iceServers: config.iceServers });
 }
 
-function hardMuteStageVideo() {
+function syncStageAudio() {
   const video = $('stageVideo');
   if (!video) return;
-  video.muted = true;
-  video.defaultMuted = true;
-  video.volume = 0;
-  video.setAttribute('muted', '');
+  const localPreview = state.isSharing || state.sharerId === state.me;
+  const shouldMute = localPreview || state.remoteAudioMuted;
+  video.muted = shouldMute;
+  video.defaultMuted = shouldMute;
+  video.volume = shouldMute ? 0 : 1;
+  if (shouldMute) video.setAttribute('muted', '');
+  else video.removeAttribute('muted');
 }
 
 async function createOutboundPeer(viewerId) {
@@ -831,21 +1120,17 @@ async function startSharing() {
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: { ideal: 30, max: 60 } },
-      // Modo anti-retorno: a transmissão é SOMENTE VÍDEO.
-      // Isso impede eco e evita capturar Discord, notificações e áudio do sistema.
-      audio: false,
+      // Áudio é opcional e focado em aba do navegador. O áudio geral do sistema
+      // fica excluído para reduzir retorno e evitar capturar Discord/Windows.
+      audio: state.shareAudio,
       systemAudio: 'exclude',
       selfBrowserSurface: 'exclude',
       surfaceSwitching: 'include'
     });
 
-    // Segurança extra: se algum navegador ainda entregar uma faixa de áudio,
-    // ela é encerrada e removida antes de enviar para qualquer participante.
-    stream.getAudioTracks().forEach((track) => {
-      track.enabled = false;
-      track.stop();
-      stream.removeTrack(track);
-    });
+    if (state.shareAudio && stream.getAudioTracks().length === 0) {
+      showToast('Nenhum áudio foi capturado. Para transmitir som, escolha uma aba do navegador e ative o áudio da aba.');
+    }
 
     const result = await new Promise((resolve) => socket.emit('start-sharing', {}, resolve));
     if (!result?.ok) {
@@ -857,8 +1142,8 @@ async function startSharing() {
     state.isSharing = true;
     state.sharerId = state.me;
     const localPreview = $('stageVideo');
-    hardMuteStageVideo();
     localPreview.srcObject = stream;
+    syncStageAudio();
     stream.getVideoTracks()[0]?.addEventListener('ended', () => stopSharing(), { once: true });
 
     updateStage();
@@ -889,12 +1174,12 @@ function stopSharing(notifyServer = true) {
   if (state.sharerId === state.me) state.sharerId = null;
   const stageVideo = $('stageVideo');
   stageVideo.srcObject = null;
-  hardMuteStageVideo();
+  syncStageAudio();
   updateStage();
 }
 
 function updateStage() {
-  hardMuteStageVideo();
+  syncStageAudio();
   const hasShare = Boolean(state.sharerId || state.isSharing);
   $('emptyStage').classList.toggle('hidden', hasShare);
   $('videoStage').classList.toggle('hidden', !hasShare);
@@ -905,8 +1190,7 @@ function updateStage() {
 
   if (state.isSharing) {
     const stageVideo = $('stageVideo');
-    stageVideo.muted = true;
-    stageVideo.volume = 0;
+    syncStageAudio();
     $('sharingLabel').textContent = 'Você está compartilhando sua tela';
     $('videoConnecting').classList.add('hidden');
   } else if (state.sharerId) {
@@ -919,15 +1203,42 @@ function updateStage() {
 function updateAudioControl() {
   const button = $('audioControl');
   if (!button) return;
-  state.shareAudio = false;
-  button.textContent = '🔇 Áudio bloqueado';
-  button.classList.remove('audio-on');
-  button.disabled = true;
-  button.title = 'Modo anti-retorno: nenhum áudio é transmitido.';
+
+  if (state.sharerId && state.sharerId !== state.me && !state.isSharing) {
+    button.disabled = false;
+    button.textContent = state.remoteAudioMuted ? '🔇 Som OFF' : '🔊 Som ON';
+    button.classList.toggle('audio-on', !state.remoteAudioMuted);
+    button.title = 'Liga ou desliga o áudio da transmissão que você está assistindo.';
+    return;
+  }
+
+  if (state.isSharing) {
+    const hasAudio = Boolean(state.localStream?.getAudioTracks().length);
+    button.disabled = true;
+    button.textContent = hasAudio ? '🔊 Áudio enviado' : '🔇 Sem áudio';
+    button.classList.toggle('audio-on', hasAudio);
+    button.title = 'Seu próprio player fica mudo para não dar retorno.';
+    return;
+  }
+
+  button.disabled = false;
+  button.textContent = state.shareAudio ? '🔊 Áudio da aba ON' : '🔇 Áudio da aba OFF';
+  button.classList.toggle('audio-on', state.shareAudio);
+  button.title = 'Ative antes de compartilhar. Para evitar Discord/retorno, use áudio de uma aba do navegador.';
 }
 
 $('audioControl').addEventListener('click', () => {
-  showToast('Áudio bloqueado para evitar retorno e impedir captura do Discord.');
+  if (state.sharerId && state.sharerId !== state.me && !state.isSharing) {
+    state.remoteAudioMuted = !state.remoteAudioMuted;
+    syncStageAudio();
+    $('stageVideo').play?.().catch(() => {});
+    updateAudioControl();
+    return;
+  }
+  if (state.isSharing) return;
+  state.shareAudio = !state.shareAudio;
+  updateAudioControl();
+  showToast(state.shareAudio ? 'Áudio da aba ativado para a próxima transmissão.' : 'Áudio da transmissão desativado.');
 });
 
 $('shareFromEmpty').addEventListener('click', startSharing);
@@ -940,6 +1251,7 @@ $('fullscreenControl').addEventListener('click', () => {
 
 async function leaveRoom() {
   if (!state.room) return;
+  await leaveVoiceCall(true);
   stopSharing(true);
   closeInboundPeer();
   $('stageVideo').srcObject = null;
@@ -966,6 +1278,7 @@ socket.on('room-state', ({ room, participants, sharerId }) => {
   state.sharerId = sharerId || null;
   renderRoom();
   updateStage();
+  updateVoiceControls();
 });
 
 socket.on('sharing-started', ({ sharerId }) => {
@@ -974,7 +1287,8 @@ socket.on('sharing-started', ({ sharerId }) => {
   if (sharerId !== state.me) {
     const stageVideo = $('stageVideo');
     stageVideo.srcObject = null;
-    hardMuteStageVideo();
+    state.remoteAudioMuted = false;
+    syncStageAudio();
     $('videoConnecting').classList.remove('hidden');
   }
   updateStage();
@@ -1015,8 +1329,9 @@ socket.on('signal', async ({ from, data }) => {
       pc.ontrack = (event) => {
         if (state.isSharing || state.sharerId === state.me) return;
         const stageVideo = $('stageVideo');
-        hardMuteStageVideo();
         stageVideo.srcObject = event.streams[0];
+        state.remoteAudioMuted = false;
+        syncStageAudio();
         stageVideo.play?.().catch(() => {});
         $('videoConnecting').classList.add('hidden');
       };
@@ -1027,6 +1342,7 @@ socket.on('signal', async ({ from, data }) => {
       };
 
       await pc.setRemoteDescription(data.sdp);
+      await flushVoiceIce(from, pc);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('signal', { target: from, data: { type: 'answer', sdp: pc.localDescription } });
@@ -1079,6 +1395,7 @@ $('refreshRooms').addEventListener('click', loadPublicRooms);
 window.addEventListener('popstate', () => routeFromLocation());
 window.addEventListener('beforeunload', () => {
   if (state.isSharing) socket.emit('stop-sharing', {});
+  if (state.voiceJoined) socket.emit('leave-voice', {});
 });
 
 async function routeFromLocation() {
@@ -1096,9 +1413,36 @@ async function routeFromLocation() {
   }
 }
 
+
+$('feedbackButton').addEventListener('click', openFeedbackModal);
+$('closeFeedback').addEventListener('click', closeFeedbackModal);
+$('feedbackModal').addEventListener('click', (event) => {
+  if (event.target.dataset.closeFeedback) closeFeedbackModal();
+});
+document.querySelectorAll('.feedback-type').forEach((button) => {
+  button.addEventListener('click', () => {
+    state.feedbackType = button.dataset.feedbackType || 'outro';
+    updateFeedbackUI();
+  });
+});
+document.querySelectorAll('#feedbackStars button').forEach((button) => {
+  button.addEventListener('click', () => {
+    state.feedbackRating = Number(button.dataset.rating) || 5;
+    updateFeedbackUI();
+  });
+});
+$('feedbackMessage').addEventListener('input', () => {
+  $('feedbackMessageCount').textContent = `${$('feedbackMessage').value.length}/1000`;
+});
+$('sendFeedback').addEventListener('click', submitFeedback);
+$('feedbackMessage').addEventListener('keydown', (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') submitFeedback();
+});
+
 $('year').textContent = new Date().getFullYear();
 updateAudioControl();
 applyDiscordLinks();
 applyIdentityToUI();
+updateVoiceControls();
 loadPublicRooms();
 routeFromLocation();
