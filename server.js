@@ -10,11 +10,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: true, credentials: true },
-  maxHttpBufferSize: 6e6
+  transports: ['websocket', 'polling'],
+  reconnection: true,
+  pingInterval: 10000,
+  pingTimeout: 20000,
+  maxHttpBufferSize: 24e6
 });
 
-const PORT = Number.parseInt(process.env.PORT || '10000', 10);
-const HOST = '0.0.0.0';
+const PORT = Number(process.env.PORT) || 3000;
 const rooms = new Map();
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -943,7 +946,7 @@ io.on('connection', (socket) => {
 });
 
 initDatabase().finally(() => {
-  server.listen(PORT, HOST, () => {
-    console.log(`[Render] LNZ Transmissão ONLINE em http://${HOST}:${PORT}`);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`LNZ Transmissão online em http://localhost:${PORT}`);
   });
 });

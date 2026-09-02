@@ -102,12 +102,17 @@ Importante:
 - Agora **Feedbacks** e **Enviar feedback** ficam no **menu principal / tela inicial**.
 
 
-## Transmissão estilo Discord — áudio separado
+## Motor de transmissão revisado integrado
 
-- O padrão visual original foi mantido.
-- O compartilhamento bloqueia o áudio geral do sistema com `systemAudio: exclude`.
-- Quando o navegador suporta, solicita somente áudio da janela com `windowAudio: window`.
-- Uma guia do navegador pode enviar o áudio da própria guia.
-- Discord, chamadas e notificações do sistema não são solicitados pela transmissão.
-- O Discord continua funcionando normalmente para quem transmite.
-- Se o navegador não conseguir fornecer áudio isolado do aplicativo, a transmissão fica sem esse áudio em vez de capturar o áudio geral do PC.
+O visual e as funções do projeto principal foram mantidos. A parte WebRTC de transmissão foi revisada usando o sistema do arquivo `LNZ-Transmissao-Revisado-v2`.
+
+Alterações principais:
+- reconexão automática do Socket.IO;
+- fila de ICE exclusiva da transmissão;
+- ICE não se mistura mais com a fila da call de voz;
+- criação/limpeza de peers mais robusta;
+- transmissor não reproduz a própria transmissão;
+- prévia local permanece muda;
+- áudio geral do sistema/Discord não é solicitado;
+- quando suportado pelo navegador, o áudio fica limitado à janela/guia compartilhada;
+- suporte existente a STUN/TURN continua preservado.

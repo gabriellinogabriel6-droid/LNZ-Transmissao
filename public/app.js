@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io({ reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 800, reconnectionDelayMax: 3000 });
 const config = window.LNZ_CONFIG || {
   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
   discordUrl: '',
@@ -33,6 +33,8 @@ const state = {
   sharerId: null,
   outboundPeers: new Map(),
   inboundPeer: null,
+  inboundPeerId: null,
+  screenPendingIce: new Map(),
   voiceJoined: false,
   voiceMuted: false,
   voiceStream: null,
@@ -1159,6 +1161,39 @@ function makePeerConnection() {
   return new RTCPeerConnection({ iceServers: config.iceServers });
 }
 
+/* Motor de transmissão revisado: ICE separado da call de voz.
+   Evita perder candidatos quando eles chegam antes da descrição remota. */
+function queueScreenIce(peerId, candidate) {
+  if (!peerId || !candidate) return;
+  const queue = state.screenPendingIce.get(peerId) || [];
+  queue.push(candidate);
+  state.screenPendingIce.set(peerId, queue);
+}
+
+async function flushScreenIce(peerId, pc) {
+  if (!peerId || !pc?.remoteDescription) return;
+  const queue = state.screenPendingIce.get(peerId) || [];
+  state.screenPendingIce.delete(peerId);
+  for (const candidate of queue) {
+    try {
+      await pc.addIceCandidate(candidate);
+    } catch (error) {
+      console.warn('[Transmissão] ICE ignorado:', error);
+    }
+  }
+}
+
+function closeScreenPeer(peerId) {
+  const pc = state.outboundPeers.get(peerId);
+  if (pc) {
+    pc.onicecandidate = null;
+    pc.onconnectionstatechange = null;
+    try { pc.close(); } catch {}
+  }
+  state.outboundPeers.delete(peerId);
+  state.screenPendingIce.delete(peerId);
+}
+
 function syncStageAudio() {
   const video = $('stageVideo');
   if (!video) return;
@@ -1225,28 +1260,43 @@ function setVoiceVolume(value) {
 }
 
 async function createOutboundPeer(viewerId) {
-  if (!state.localStream || !state.isSharing || viewerId === state.me) return;
-  state.outboundPeers.get(viewerId)?.close();
+  if (!state.localStream || !state.isSharing || !viewerId || viewerId === state.me) return;
+
+  closeScreenPeer(viewerId);
 
   const pc = makePeerConnection();
   state.outboundPeers.set(viewerId, pc);
-  state.localStream.getTracks().forEach((track) => pc.addTrack(track, state.localStream));
+
+  for (const track of state.localStream.getTracks()) {
+    pc.addTrack(track, state.localStream);
+  }
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
-      socket.emit('signal', { target: viewerId, data: { type: 'ice', candidate: event.candidate } });
-    }
-  };
-  pc.onconnectionstatechange = () => {
-    if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) {
-      pc.close();
-      state.outboundPeers.delete(viewerId);
+      socket.emit('signal', {
+        target: viewerId,
+        data: { type: 'ice', candidate: event.candidate }
+      });
     }
   };
 
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  socket.emit('signal', { target: viewerId, data: { type: 'offer', sdp: pc.localDescription } });
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      closeScreenPeer(viewerId);
+    }
+  };
+
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('signal', {
+      target: viewerId,
+      data: { type: 'offer', sdp: pc.localDescription }
+    });
+  } catch (error) {
+    console.error('[Transmissão] Falha ao criar oferta:', error);
+    closeScreenPeer(viewerId);
+  }
 }
 
 async function startSharing() {
@@ -1258,17 +1308,15 @@ async function startSharing() {
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: { ideal: 30, max: 60 } },
-
-      // MODO DISCORD-SAFE:
-      // tenta transmitir apenas o áudio da guia/janela compartilhada.
-      // O áudio geral do computador fica excluído para evitar capturar
-      // Discord, chamadas, notificações e outros aplicativos.
       audio: state.shareAudio ? {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
         suppressLocalAudioPlayback: false
       } : false,
+
+      // Mantém o comportamento pedido: o áudio geral do PC/Discord não é solicitado.
+      // Quando o navegador suporta, usa somente o áudio da janela compartilhada.
       systemAudio: 'exclude',
       windowAudio: state.shareAudio ? 'window' : 'exclude',
       monitorTypeSurfaces: 'include',
@@ -1277,7 +1325,7 @@ async function startSharing() {
     });
 
     if (state.shareAudio && stream.getAudioTracks().length === 0) {
-      showToast('O navegador não liberou áudio isolado desta guia/janela. O áudio geral do PC e o Discord continuam bloqueados da transmissão.');
+      showToast('A tela foi compartilhada, mas o navegador não liberou áudio isolado dessa janela/guia. Discord continua fora da transmissão.');
     }
 
     const result = await new Promise((resolve) => socket.emit('start-sharing', {}, resolve));
@@ -1304,13 +1352,19 @@ async function startSharing() {
 }
 
 function closeOutboundPeers() {
-  for (const pc of state.outboundPeers.values()) pc.close();
-  state.outboundPeers.clear();
+  for (const peerId of [...state.outboundPeers.keys()]) closeScreenPeer(peerId);
 }
 
 function closeInboundPeer() {
-  state.inboundPeer?.close();
+  if (state.inboundPeer) {
+    state.inboundPeer.onicecandidate = null;
+    state.inboundPeer.ontrack = null;
+    state.inboundPeer.onconnectionstatechange = null;
+    try { state.inboundPeer.close(); } catch {}
+  }
+  if (state.inboundPeerId) state.screenPendingIce.delete(state.inboundPeerId);
   state.inboundPeer = null;
+  state.inboundPeerId = null;
 }
 
 function stopSharing(notifyServer = true) {
@@ -1372,7 +1426,7 @@ function updateAudioControl() {
   button.disabled = false;
   button.textContent = state.shareAudio ? '🔊 Enviar áudio ON' : '🔇 Enviar áudio OFF';
   button.classList.toggle('audio-on', state.shareAudio);
-  button.title = 'Envia somente o áudio da guia/janela quando disponível. Discord e áudio geral do PC ficam fora da transmissão.';
+  button.title = 'Envia áudio da janela/guia quando disponível. O áudio geral do PC e o Discord ficam fora da transmissão.';
 }
 
 $('audioControl').addEventListener('click', () => {
@@ -1386,7 +1440,7 @@ $('audioControl').addEventListener('click', () => {
   if (state.isSharing) return;
   state.shareAudio = !state.shareAudio;
   updateAudioControl();
-  showToast(state.shareAudio ? 'Áudio do app/guia ativado. Discord fica fora da transmissão.' : 'Áudio da transmissão desativado.');
+  showToast(state.shareAudio ? 'Áudio da janela/guia ativado. Discord fica fora da transmissão.' : 'Áudio da transmissão desativado.');
 });
 
 $('mixerControl')?.addEventListener('click', () => {
@@ -1476,57 +1530,96 @@ socket.on('viewer-joined', ({ viewerId }) => {
 });
 
 socket.on('viewer-left', ({ viewerId }) => {
-  const pc = state.outboundPeers.get(viewerId);
-  if (pc) pc.close();
-  state.outboundPeers.delete(viewerId);
+  closeScreenPeer(viewerId);
 });
 
 socket.on('signal', async ({ from, data }) => {
+  if (!from || !data) return;
+
   try {
     if (data.type === 'offer') {
-      // O transmissor nunca deve receber/reproduzir uma transmissão de volta.
+      // Quem está transmitindo nunca reproduz a própria transmissão de volta.
       if (state.isSharing || state.sharerId === state.me || from === state.me) return;
+
       closeInboundPeer();
       const pc = makePeerConnection();
       state.inboundPeer = pc;
+      state.inboundPeerId = from;
 
       pc.onicecandidate = (event) => {
-        if (event.candidate) socket.emit('signal', { target: from, data: { type: 'ice', candidate: event.candidate } });
+        if (event.candidate) {
+          socket.emit('signal', {
+            target: from,
+            data: { type: 'ice', candidate: event.candidate }
+          });
+        }
       };
+
       pc.ontrack = (event) => {
         if (state.isSharing || state.sharerId === state.me) return;
+
+        const stream = event.streams?.[0] || new MediaStream([event.track]);
         const stageVideo = $('stageVideo');
-        stageVideo.srcObject = event.streams[0];
+
+        if (stageVideo.srcObject !== stream) stageVideo.srcObject = stream;
         state.remoteAudioMuted = false;
         syncStageAudio();
-        stageVideo.play?.().catch(() => {});
+        stageVideo.play?.().catch(() => {
+          showToast('Clique na transmissão para liberar o áudio.');
+        });
         $('videoConnecting').classList.add('hidden');
       };
+
       pc.onconnectionstatechange = () => {
-        if (['failed', 'closed'].includes(pc.connectionState)) {
+        if (pc.connectionState === 'connected') {
+          $('videoConnecting').classList.add('hidden');
+        } else if (pc.connectionState === 'failed') {
+          $('videoConnecting').classList.remove('hidden');
+          showToast('Conexão direta falhou. Um servidor TURN pode ser necessário nessa rede.');
+        } else if (pc.connectionState === 'disconnected') {
           $('videoConnecting').classList.remove('hidden');
         }
       };
 
       await pc.setRemoteDescription(data.sdp);
-      await flushVoiceIce(from, pc);
+      await flushScreenIce(from, pc);
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      socket.emit('signal', { target: from, data: { type: 'answer', sdp: pc.localDescription } });
+      socket.emit('signal', {
+        target: from,
+        data: { type: 'answer', sdp: pc.localDescription }
+      });
       return;
     }
 
     if (data.type === 'answer') {
       const pc = state.outboundPeers.get(from);
-      if (pc) await pc.setRemoteDescription(data.sdp);
+      if (!pc) return;
+
+      await pc.setRemoteDescription(data.sdp);
+      await flushScreenIce(from, pc);
       return;
     }
 
     if (data.type === 'ice' && data.candidate) {
-      const pc = state.isSharing ? state.outboundPeers.get(from) : state.inboundPeer;
-      if (pc) await pc.addIceCandidate(data.candidate);
+      const pc = state.isSharing
+        ? state.outboundPeers.get(from)
+        : (state.inboundPeerId === from ? state.inboundPeer : null);
+
+      if (!pc || !pc.remoteDescription) {
+        queueScreenIce(from, data.candidate);
+        return;
+      }
+
+      try {
+        await pc.addIceCandidate(data.candidate);
+      } catch (error) {
+        console.warn('[Transmissão] ICE não aplicado:', error);
+      }
     }
-  } catch {
+  } catch (error) {
+    console.error('[Transmissão] Falha WebRTC:', error);
     showToast('Falha na conexão da transmissão.');
   }
 });
